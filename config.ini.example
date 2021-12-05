@@ -1,0 +1,4 @@
+[grocy]
+
+base_url = http://localhost/grocy/public/api
+api_key = PLEASESET
