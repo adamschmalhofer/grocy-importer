@@ -22,13 +22,18 @@ class GrocyApi:
     def get_all_products(self):
         response = requests.get(self.BASE_URL + '/objects/products',
                                 headers=self.HEADERS)
-        return {p['name']: p['id'] for p in response.json()}
+        return {p['name']: p for p in response.json()}
 
-    def purchase(self, productId: int, amount: int, price: str):
+    def purchase(self, productId: int, amount: int, price: str,
+                 shopping_location_id: int):
         CALL = f'/stock/products/{productId}/add'
         response = requests.post(self.BASE_URL + CALL,
                                  headers=self.HEADERS,
-                                 json={'amount': amount, 'price': price})
+                                 json={'amount': amount,
+                                       'price': price,
+                                       'transaction_type': 'purchase',
+                                       'shopping_location_id': shopping_location_id
+                                       })
         assert(response.status_code/100 == 2)
 
 
@@ -70,6 +75,8 @@ def simplify(items: Iterable[Purchase]) -> List[Purchase]:
     ... parse_purchase(['Mehl', '2,00']),
     ... parse_purchase(['Milch', '1,00'])])
     [Purchase(amount=1, price='2.00', name='Mehl'), Purchase(amount=2, price='1.00', name='Milch')]
+    >>> simplify([parse_purchase(['Punkte-Gutschein', '-1,05'])])
+    []
 
     '''
     return [Purchase(sum(p.amount for p in g),
@@ -94,7 +101,8 @@ def netto_purchase():
                     if not list(row.select('td'))[0].get_text().endswith(':')
                     and not any(keyword in row.get_text()
                                 for keyword in ['Filiale', 'Rabatt',
-                                                'DeutschlandCard'])
+                                                'DeutschlandCard',
+                                                'Punkte-Gutschein'])
                     for column in row.select('td')
                     if column.get_text() != ''
                     )
@@ -113,15 +121,19 @@ def main():
     groceries = netto_purchase()
     grocy = GrocyApi(**config['grocy'])
     known_products = grocy.get_all_products()
-    unknown_items = [str(item)
-                     for item in groceries
-                     if item.name not in known_products]
-    if any(unknown_items):
+    while any(unknown_items := [str(item)
+                                for item in groceries
+                                if item.name not in known_products]):
         print('Unknown products. Please add to grocy:')
         print('\n'.join(unknown_items))
-        exit(1)
+        input('...')
+        known_products = grocy.get_all_products()
     for item in groceries:
-        grocy.purchase(known_products[item.name], item.amount, item.price)
+        p = known_products[item.name]
+        grocy.purchase(p['id'],
+                       item.amount * float(p['qu_factor_purchase_to_stock']),
+                       item.price,
+                       config['netto']['shopping_location_id'])
         print(f'Added {item}')
 
 

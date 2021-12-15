@@ -2,3 +2,7 @@
 
 base_url = http://localhost/grocy/public/api
 api_key = PLEASESET
+
+[netto]
+
+shopping_location_id = 42
