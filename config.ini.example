@@ -5,8 +5,16 @@ api_key = PLEASESET
 
 [netto]
 
-shopping_location_id = 42
+# Uncomment the following line to manually set the grocy shopping location to use.
+# This isn't needed if you only have one shopping location with a name starting with
+# 'netto' (case insensitive).
+
+#shopping_location_id = 42
 
 [rewe]
 
-shopping_location_id = 7
+# Uncomment the following line to manually set the grocy shopping location to use.
+# This isn't needed if you only have one shopping location with a name starting with
+# 'rewe' (case insensitive).
+
+#shopping_location_id = 7

@@ -19,10 +19,20 @@ from marshmallow import Schema, fields, EXCLUDE, post_load
 from appdirs import user_config_dir
 
 
+class UserError(Exception):
+    ''' Exception that we display to the human '''
+
+
 class GrocyProduct(TypedDict):
     ''' A product as returned from the Grocy API '''
     id: int
     qu_factor_purchase_to_stock: float
+
+
+class GrocyShoppingLocation(TypedDict):
+    ''' A shopping location as returned from the Grocy API '''
+    id: int
+    name: str
 
 
 class GrocyApi:
@@ -38,6 +48,12 @@ class GrocyApi:
         response = requests.get(self.base_url + '/objects/products',
                                 headers=self.headers)
         return {p['name']: p for p in response.json()}
+
+    def get_all_shopping_locations(self) -> Iterable[GrocyShoppingLocation]:
+        ''' all shopping locations known to grocy '''
+        response = requests.get(self.base_url + '/objects/products',
+                                headers=self.headers)
+        return response.json()
 
     def purchase(self, product_id: int, amount: float, price: str,
                  shopping_location_id: int) -> None:
@@ -375,6 +391,31 @@ def get_argparser() -> ArgumentParser:
     return parser
 
 
+def find_shopping_location_for(store: str,
+                               options: Iterable[GrocyShoppingLocation]
+                               ) -> GrocyShoppingLocation:
+    ''' Find the grocy shopping location for given `store`'''
+    try:
+        return sorted(filter(lambda o: o['name'].lower().startswith(store),
+                             options),
+                      key=lambda o: o['name'].lower())[0]
+    except IndexError as ex:
+        raise UserError(f"No shopping location found for '{store}'.") from ex
+
+
+def get_shopping_location_id(store: str,
+                             config: ConfigParser,
+                             grocy: GrocyApi
+                             ) -> int:
+    ''' grocy's shopping location id '''
+    try:
+        return int(config[store]['shopping_location_id'])
+    except KeyError:
+        return find_shopping_location_for(store,
+                                          grocy.get_all_shopping_locations()
+                                          )['id']
+
+
 def import_purchase(args,
                     config: ConfigParser,
                     grocy: GrocyApi):
@@ -383,7 +424,7 @@ def import_purchase(args,
               'rewe': rewe_purchase}
     groceries = stores[args.store](args)
     known_products = grocy.get_all_products()
-    shopping_location = int(config[args.store]['shopping_location_id'])
+    shopping_location = get_shopping_location_id(args.store, config, grocy)
     while any(unknown_items := [str(item)
                                 for item in groceries
                                 if item.name not in known_products]):
