@@ -19,9 +19,10 @@ import requests
 class GrocyApi:
     ''' Calls to the Grocy REST-API '''
 
-    def __init__(self, api_key, base_url):
+    def __init__(self, api_key: str, base_url: str, dry_run: bool):
         self.headers = {'GROCY-API-KEY': api_key}
         self.base_url = base_url
+        self.dry_run = dry_run
 
     def get_all_products(self):
         ''' all products known to grocy '''
@@ -32,6 +33,8 @@ class GrocyApi:
     def purchase(self, product_id: int, amount: int, price: str,
                  shopping_location_id: int):
         ''' Add a purchase to grocy '''
+        if self.dry_run:
+            return
         call = f'/stock/products/{product_id}/add'
         response = requests.post(self.base_url + call,
                                  headers=self.headers,
@@ -138,6 +141,8 @@ def netto_purchase(file: TextIO):
 def get_argparser() -> ArgumentParser:
     ''' ArgumentParser factory method '''
     parser = ArgumentParser(description='Help importing into Grocy')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='perform a trial run with no changes made')
     subparsers = parser.add_subparsers()
     purchase = subparsers.add_parser('purchase',
                                      help='import purchases')
@@ -182,7 +187,7 @@ def main():
     args = get_argparser().parse_args()
     config = ConfigParser()
     config.read(join(dirname(abspath(argv[0])), 'config.ini'))
-    grocy = GrocyApi(**config['grocy'])
+    grocy = GrocyApi(**config['grocy'], dry_run=args.dry_run)
     args.func(args, config, grocy)
 
 
