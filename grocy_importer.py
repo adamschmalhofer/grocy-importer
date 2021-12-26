@@ -6,7 +6,7 @@ from argparse import ArgumentParser, FileType
 import re
 from sys import argv
 from email.parser import Parser
-from typing import Union, Iterable, Optional
+from typing import Union, Iterable, Optional, TextIO
 from dataclasses import dataclass
 from itertools import groupby
 from configparser import ConfigParser
@@ -46,7 +46,7 @@ class GrocyApi:
                                        'shopping_location_id':
                                        shopping_location_id
                                        })
-        assert response.status_code/100 == 2
+        assert response.status_code//100 == 2
 
 
 def cleanup_product_name(orig: str) -> str:
@@ -106,6 +106,19 @@ def simplify(items: Iterable[Purchase]) -> list[Purchase]:
             in groupby(sorted(items, key=lambda p: p.name),
                        lambda p: (p.name, p.price))
             if float(price) >= 0]
+
+
+def rewe_purchase(args) -> list[Purchase]:
+    ''' Import from REWE '''
+    data = ReweJsonSchema.load_from_json_file(args.file)
+    return [Purchase(line_item.quantity,
+                     line_item.total_price,
+                     line_item.title)
+            for line_item in data.sorted_orders()[args.order-1
+                                                  ].sub_orders[0].line_items
+            if line_item.title not in ['TimeSlot',
+                                       'Enthaltene Pfandbeträge',
+                                       'Getränke-Sperrgutaufschlag']]
 
 
 def netto_purchase(args) -> list[Purchase]:
@@ -288,6 +301,12 @@ class ReweJsonSchema(Schema):
     orders = fields.Nested(ReweJsonOrdersListSchema, unknown=EXCLUDE)
     # coupons: object
 
+    @staticmethod
+    def load_from_json_file(file: TextIO) -> ReweJson:
+        ''' Load data from given json file '''
+        return ReweJsonSchema(unknown=EXCLUDE).load(json.load(file),
+                                                    unknown=EXCLUDE)
+
     @post_load
     def make(self, data, **__) -> ReweJson:
         ''' Create instance from deserialized data '''
@@ -299,9 +318,8 @@ def list_rewe_purchases(args, *_) -> None:
 
     List purchases from the German supermarket chain REWE
     '''
-    print('\n'.join(ReweJsonSchema(unknown=EXCLUDE).load(json.load(args.file),
-                                                         unknown=EXCLUDE
-                                                         ).list_orders()))
+    print('\n'.join(ReweJsonSchema.load_from_json_file(args.file).list_orders()
+                    ))
 
 
 def get_argparser() -> ArgumentParser:
@@ -323,18 +341,30 @@ def get_argparser() -> ArgumentParser:
                                                   ' supermarket chain Netto'
                                                   ' Marken-Discount')
     netto.set_defaults(func=import_purchase)
+    netto.add_argument('file',
+                       type=FileType('r', encoding='utf-8'),
+                       help='Path to an e-mail with the "digitaler Kassenbon"')
     rewe = (purchase_store
             .add_parser('rewe',
                         help='German supermarket chain REWE',
                         description='Import from DSGVO provided'
                                     ' "Meine REWE-Shop-Daten.json"')
-            .add_subparsers())
-    rewe.add_parser('list',
-                    help='list the purchases'
-                    ).set_defaults(func=list_rewe_purchases)
-    purchase.add_argument('file',
-                          type=FileType('r', encoding='utf-8'),
-                          help='')
+            .add_subparsers(metavar='ACTION', required=True))
+    rewe_list = rewe.add_parser('list', help='list the purchases')
+    rewe_list.set_defaults(func=list_rewe_purchases)
+    rewe_import = rewe.add_parser('import',
+                                  help='import a purchase')
+    rewe_import.set_defaults(func=import_purchase)
+    rewe_import.add_argument('--order', type=int, default=1, metavar='N',
+                             help='Which order to import. Defaults to 1'
+                                  ' (the latest)')
+    for subcommand in [rewe_import, rewe_list]:
+        subcommand.add_argument('file',
+                                type=FileType('r', encoding='utf-8'),
+                                help='Path to "Meine REWE-Shop-Daten.json"'
+                                     ' file. Downloadable from'
+                                     ' https://shop.rewe.de/mydata/privacy'
+                                     ' under "Meine Daten anfordern"')
     return parser
 
 
@@ -342,7 +372,8 @@ def import_purchase(args,
                     config: ConfigParser,
                     grocy: GrocyApi):
     ''' help importing multiple purchases into grocy '''
-    stores = {'netto': netto_purchase}
+    stores = {'netto': netto_purchase,
+              'rewe': rewe_purchase}
     groceries = stores[args.store](args)
     known_products = grocy.get_all_products()
     shopping_location = int(config[args.store]['shopping_location_id'])

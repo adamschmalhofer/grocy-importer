@@ -6,3 +6,7 @@ api_key = PLEASESET
 [netto]
 
 shopping_location_id = 42
+
+[rewe]
+
+shopping_location_id = 7
