@@ -5,7 +5,7 @@
 from argparse import ArgumentParser, FileType
 import re
 from email.parser import Parser
-from typing import Union, Iterable, Optional, TextIO
+from typing import Union, Iterable, Optional, TextIO, TypedDict
 from dataclasses import dataclass
 from itertools import groupby
 from configparser import ConfigParser
@@ -19,6 +19,12 @@ from marshmallow import Schema, fields, EXCLUDE, post_load
 from appdirs import user_config_dir
 
 
+class GrocyProduct(TypedDict):
+    ''' A product as returned from the Grocy API '''
+    id: int
+    qu_factor_purchase_to_stock: float
+
+
 class GrocyApi:
     ''' Calls to the Grocy REST-API '''
 
@@ -27,14 +33,14 @@ class GrocyApi:
         self.base_url = base_url
         self.dry_run = dry_run
 
-    def get_all_products(self):
+    def get_all_products(self) -> dict[str, GrocyProduct]:
         ''' all products known to grocy '''
         response = requests.get(self.base_url + '/objects/products',
                                 headers=self.headers)
         return {p['name']: p for p in response.json()}
 
     def purchase(self, product_id: int, amount: float, price: str,
-                 shopping_location_id: int):
+                 shopping_location_id: int) -> None:
         ''' Add a purchase to grocy '''
         if self.dry_run:
             return
