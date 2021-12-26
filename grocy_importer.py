@@ -6,14 +6,16 @@ from argparse import ArgumentParser, FileType
 import re
 from sys import argv
 from email.parser import Parser
-from typing import Union, Iterable, TextIO
+from typing import Union, Iterable, Optional
 from dataclasses import dataclass
 from itertools import groupby
 from configparser import ConfigParser
 from os.path import dirname, abspath, join
+import json
 
 from bs4 import BeautifulSoup
 import requests
+from marshmallow import Schema, fields, EXCLUDE, post_load
 
 
 class GrocyApi:
@@ -30,7 +32,7 @@ class GrocyApi:
                                 headers=self.headers)
         return {p['name']: p for p in response.json()}
 
-    def purchase(self, product_id: int, amount: int, price: str,
+    def purchase(self, product_id: int, amount: float, price: str,
                  shopping_location_id: int):
         ''' Add a purchase to grocy '''
         if self.dry_run:
@@ -106,13 +108,13 @@ def simplify(items: Iterable[Purchase]) -> list[Purchase]:
             if float(price) >= 0]
 
 
-def netto_purchase(file: TextIO):
+def netto_purchase(args) -> list[Purchase]:
     ''' Import from Netto Marken-Discount
 
-    Import a "digitaler Kassenbon" email from the german discount
+    Import a "digitaler Kassenbon" email from the German discount
     supermarket chain Netto Marken-Discount
     '''
-    email = Parser().parse(file)
+    email = Parser().parse(args.file)
     html = list(part
                 for part in email.walk()
                 if part.get_content_type() == 'text/html'
@@ -138,24 +140,192 @@ def netto_purchase(file: TextIO):
     return simplify(parse_purchase(item) for item in items if len(item) > 1)
 
 
+@dataclass
+class ReweJsonLineItem:
+    price: int
+    quantity: int
+    title: str
+    totalPrice: int
+
+
+@dataclass
+class ReweJsonSuborder:
+    deliveryType: str
+    # coupons: fields.List()
+    # merchantInfo: object
+    orderType: str
+    paybackNumber: Optional[str]
+    channel: str
+    # deliveryAddress: object
+    subOrderValue: int
+    lineItems: list[ReweJsonLineItem]
+    # timeSlot: object
+    additionalEmail: str
+    userComment: str
+    merchant: str
+
+
+@dataclass
+class ReweJsonOrder:
+    # payments: fields.List()
+    # invoiceAddress: object
+    orderValue: int
+    clientInfo: str
+    # paymentInfo: object
+    subOrders: list[ReweJsonSuborder]
+    # OrderId: str
+    creationDate: str
+
+
+@dataclass
+class ReweJsonOrdersList:
+    orders: list[ReweJsonOrder]
+
+
+@dataclass
+class ReweJson:
+    # addressData: fields.List()
+    # deliveryflats: fields.List()
+    # payback: object
+    # customerData: object
+    # paymentData: object
+    orders: ReweJsonOrdersList
+    # coupons: object
+
+
+class ReweJsonLineItemSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+    price = fields.Integer()
+    quantity = fields.Integer()
+    title = fields.Str()
+    totalPrice = fields.Integer()
+
+    @post_load
+    def make(self, data, **kwargs) -> ReweJsonLineItem:
+        return ReweJsonLineItem(**data)
+
+
+class ReweJsonSuborderSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+    deliveryType = fields.Str()
+    # coupons = fields.List()
+    # merchantInfo: object
+    orderType = fields.Str()
+    paybackNumber = fields.Str(allow_none=True)
+    channel = fields.Str()
+    # deliveryAddress: object
+    subOrderValue = fields.Integer()
+    lineItems = fields.List(fields.Nested(ReweJsonLineItemSchema,
+                                          unkown=EXCLUDE))
+    # timeSlot: object
+    additionalEmail = fields.Str()
+    userComment = fields.Str()
+    merchant = fields.Str()
+
+    @post_load
+    def make(self, data, **kwargs) -> ReweJsonSuborder:
+        return ReweJsonSuborder(**data)
+
+
+class ReweJsonOrderSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+    # payments = fields.List()
+    # invoiceAddress: object
+    orderValue = fields.Integer()
+    clientInfo = fields.Str()
+    # paymentInfo: object
+    subOrders = fields.List(fields.Nested(ReweJsonSuborderSchema,
+                                          unkown=EXCLUDE))
+    # OrderId = fields.Str()
+    creationDate = fields.Str()
+
+    @post_load
+    def make(self, data, **kwargs) -> ReweJsonOrder:
+        return ReweJsonOrder(**data)
+
+
+class ReweJsonOrdersListSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+    orders = fields.List(fields.Nested(ReweJsonOrderSchema, unkown=EXCLUDE))
+
+    @post_load
+    def make(self, data, **kwargs) -> ReweJsonOrdersList:
+        return ReweJsonOrdersList(**data)
+
+
+class ReweJsonSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+    # addressData = fields.List()
+    # deliveryflats = fields.List()
+    # payback: object
+    # customerData: object
+    # paymentData: object
+    orders = fields.Nested(ReweJsonOrdersListSchema, unkown=EXCLUDE)
+    # coupons: object
+
+    @post_load
+    def make(self, data, **kwargs) -> ReweJson:
+        return ReweJson(**data)
+
+
+def sorted_orders(data: ReweJson) -> list[ReweJsonOrder]:
+    return sorted(data.orders.orders,
+                  key=lambda x: x.creationDate, reverse=True)
+
+
+def list_orders(data: ReweJson):
+    for i, orde in enumerate(sorted_orders(data)):
+        date = orde.creationDate
+        value = orde.orderValue
+        merchant = orde.subOrders[0].merchant
+        print(f'{i+1}. {date[:4]}-{date[4:6]}-{date[6:8]} {merchant}'
+              f' {int(value) / 100} €')
+
+
+def list_rewe_purchases(args, *_) -> None:
+    ''' List purchases from REWE
+
+    List purchases from the German supermarket chain REWE
+    '''
+    list_orders(ReweJsonSchema().load(json.load(args.file)))
+
+
 def get_argparser() -> ArgumentParser:
     ''' ArgumentParser factory method '''
     parser = ArgumentParser(description='Help importing into Grocy')
     parser.add_argument('--dry-run', action='store_true',
                         help='perform a trial run with no changes made')
     subparsers = parser.add_subparsers()
-    purchase = subparsers.add_parser('purchase',
-                                     help='import purchases')
-    purchase.set_defaults(func=import_purchase)
+    purchase = subparsers.add_parser('purchase', help='import purchases')
     purchase_store = purchase.add_subparsers(metavar='STORE',
                                              required=True,
                                              dest='store')
-    purchase_store.add_parser('netto',
-                              help='import a "digitaler Kassenbon" email from'
-                                   ' the german discount supermarket chain'
-                                   ' Netto Marken-Discount')
+    netto = purchase_store.add_parser('netto',
+                                      help='German discount supermarket chain'
+                                           ' Netto Marken-Discount',
+                                      description='import a "digitaler'
+                                                  ' Kassenbon" email from the'
+                                                  ' German discount'
+                                                  ' supermarket chain Netto'
+                                                  ' Marken-Discount')
+    netto.set_defaults(func=import_purchase)
+    rewe = (purchase_store
+            .add_parser('rewe',
+                        help='German supermarket chain REWE',
+                        description='Import from DSGVO provided'
+                                    ' "Meine REWE-Shop-Daten.json"')
+            .add_subparsers())
+    rewe.add_parser('list',
+                    help='list the purchases'
+                    ).set_defaults(func=list_rewe_purchases)
     purchase.add_argument('file',
-                          type=FileType('r', encoding='utf-8'))
+                          type=FileType('r', encoding='utf-8'),
+                          help='')
     return parser
 
 
@@ -163,8 +333,10 @@ def import_purchase(args,
                     config: ConfigParser,
                     grocy: GrocyApi):
     ''' help importing multiple purchases into grocy '''
-    groceries = netto_purchase(args.file)
+    stores = {'netto': netto_purchase}
+    groceries = stores[args.store](args)
     known_products = grocy.get_all_products()
+    shopping_location = int(config[args.store]['shopping_location_id'])
     while any(unknown_items := [str(item)
                                 for item in groceries
                                 if item.name not in known_products]):
@@ -177,7 +349,7 @@ def import_purchase(args,
         grocy.purchase(pro['id'],
                        item.amount * float(pro['qu_factor_purchase_to_stock']),
                        item.price,
-                       int(config[args.store]['shopping_location_id'])
+                       shopping_location
                        )
         print(f'Added {item}')
 
