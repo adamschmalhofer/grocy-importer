@@ -451,12 +451,16 @@ def main():
     config.read(config_path)
     try:
         grocy = GrocyApi(**config['grocy'], dry_run=args.dry_run)
-    except KeyError:
-        sys.exit(f"Error: Configfile '{config_path}' is missing or incomplete."
-                 )
+    except KeyError as ex:
+        raise UserError(f"Configfile '{config_path}'"
+                        " is missing or incomplete."
+                        ) from ex
     else:
         args.func(args, config, grocy)
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except UserError as err:
+        sys.exit(f"Error: {err}")
