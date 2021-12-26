@@ -1,9 +1,11 @@
 #!/usr/bin/python3
 
+''' Help importing into Grocy '''
+
 import re
-from sys import argv, exit
+from sys import argv
 from email.parser import Parser
-from typing import List, Union, Iterable
+from typing import Union, Iterable
 from dataclasses import dataclass
 from itertools import groupby
 from configparser import ConfigParser
@@ -14,41 +16,48 @@ import requests
 
 
 class GrocyApi:
+    ''' Calls to the Grocy REST-API '''
 
     def __init__(self, api_key, base_url):
-        self.HEADERS = {'GROCY-API-KEY': api_key}
-        self.BASE_URL = base_url
+        self.headers = {'GROCY-API-KEY': api_key}
+        self.base_url = base_url
 
     def get_all_products(self):
-        response = requests.get(self.BASE_URL + '/objects/products',
-                                headers=self.HEADERS)
+        ''' all products known to grocy '''
+        response = requests.get(self.base_url + '/objects/products',
+                                headers=self.headers)
         return {p['name']: p for p in response.json()}
 
-    def purchase(self, productId: int, amount: int, price: str,
+    def purchase(self, product_id: int, amount: int, price: str,
                  shopping_location_id: int):
-        CALL = f'/stock/products/{productId}/add'
-        response = requests.post(self.BASE_URL + CALL,
-                                 headers=self.HEADERS,
+        ''' Add a purchase to grocy '''
+        call = f'/stock/products/{product_id}/add'
+        response = requests.post(self.base_url + call,
+                                 headers=self.headers,
                                  json={'amount': amount,
                                        'price': price,
                                        'transaction_type': 'purchase',
-                                       'shopping_location_id': shopping_location_id
+                                       'shopping_location_id':
+                                       shopping_location_id
                                        })
-        assert(response.status_code/100 == 2)
+        assert response.status_code/100 == 2
 
 
 def cleanup_product_name(orig: str) -> str:
+    ''' Remove multiple white space '''
     return re.sub(r'\s+', ' ', orig)
 
 
 @dataclass
 class Purchase:
+    ''' Represents a grocy purchase '''
     amount: Union[int, float]
     price: str
     name: str
 
 
-def parse_purchase(args):
+def parse_purchase(args: list[str]) -> Purchase:
+    ''' Parse a Netto store purchase '''
     return (Purchase(1,
                      from_netto_price(args[1]),
                      cleanup_product_name(args[0]))
@@ -59,14 +68,17 @@ def parse_purchase(args):
 
 
 def from_netto_price(netto_price: str) -> str:
+    ''' convert from Netto store price format to grocy's '''
     return netto_price.split()[0].replace(',', '.')
 
 
-def simplify(items: Iterable[Purchase]) -> List[Purchase]:
+def simplify(items: Iterable[Purchase]) -> list[Purchase]:
     '''
     >>> simplify([parse_purchase(['Milch', '1,00']),
     ... parse_purchase(['Mehl', '2,00'])])
-    [Purchase(amount=1, price='2.00', name='Mehl'), Purchase(amount=1, price='1.00', name='Milch')]
+    ... #doctest: +NORMALIZE_WHITESPACE
+    [Purchase(amount=1, price='2.00', name='Mehl'),
+     Purchase(amount=1, price='1.00', name='Milch')]
 
     >>> simplify([parse_purchase(['Milch', '1,00']),
     ... parse_purchase(['Milch', '1,00'])])
@@ -74,7 +86,9 @@ def simplify(items: Iterable[Purchase]) -> List[Purchase]:
     >>> simplify([parse_purchase(['Milch', '1,00']),
     ... parse_purchase(['Mehl', '2,00']),
     ... parse_purchase(['Milch', '1,00'])])
-    [Purchase(amount=1, price='2.00', name='Mehl'), Purchase(amount=2, price='1.00', name='Milch')]
+    ... #doctest: +NORMALIZE_WHITESPACE
+    [Purchase(amount=1, price='2.00', name='Mehl'),
+     Purchase(amount=2, price='1.00', name='Milch')]
     >>> simplify([parse_purchase(['Punkte-Gutschein', '-1,05'])])
     []
 
@@ -89,8 +103,9 @@ def simplify(items: Iterable[Purchase]) -> List[Purchase]:
 
 
 def netto_purchase():
-    with open(argv[1], 'r', encoding='utf-8') as f:
-        email = Parser().parse(f)
+    ''' import a 'digitaler Kassenbon' email '''
+    with open(argv[1], 'r', encoding='utf-8') as fil:
+        email = Parser().parse(fil)
     html = list(part
                 for part in email.walk()
                 if part.get_content_type() == 'text/html'
@@ -107,16 +122,17 @@ def netto_purchase():
                     for column in row.select('td')
                     if column.get_text() != ''
                     )
-    items: List[List[str]] = []
-    for p in purchase:
-        if p.isspace():
+    items: list[list[str]] = []
+    for pur in purchase:
+        if pur.isspace():
             items.append([])
         else:
-            items[-1].append(p)
+            items[-1].append(pur)
     return simplify(parse_purchase(item) for item in items if len(item) > 1)
 
 
 def main():
+    ''' Run the CLI program '''
     config = ConfigParser()
     config.read(join(dirname(abspath(argv[0])), 'config.ini'))
     groceries = netto_purchase()
@@ -130,9 +146,9 @@ def main():
         input('...')
         known_products = grocy.get_all_products()
     for item in groceries:
-        p = known_products[item.name]
-        grocy.purchase(p['id'],
-                       item.amount * float(p['qu_factor_purchase_to_stock']),
+        pro = known_products[item.name]
+        grocy.purchase(pro['id'],
+                       item.amount * float(pro['qu_factor_purchase_to_stock']),
                        item.price,
                        config['netto']['shopping_location_id'])
         print(f'Added {item}')
