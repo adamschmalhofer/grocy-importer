@@ -4,18 +4,19 @@
 
 from argparse import ArgumentParser, FileType
 import re
-from sys import argv
 from email.parser import Parser
 from typing import Union, Iterable, Optional, TextIO
 from dataclasses import dataclass
 from itertools import groupby
 from configparser import ConfigParser
-from os.path import dirname, abspath, join
+from os.path import join
+import sys
 import json
 
 from bs4 import BeautifulSoup
 import requests
 from marshmallow import Schema, fields, EXCLUDE, post_load
+from appdirs import user_config_dir
 
 
 class GrocyApi:
@@ -397,10 +398,17 @@ def import_purchase(args,
 def main():
     ''' Run the CLI program '''
     args = get_argparser().parse_args()
+    config_path = join(user_config_dir('grocy-importer', 'adaschma.name'),
+                       'config.ini')
     config = ConfigParser()
-    config.read(join(dirname(abspath(argv[0])), 'config.ini'))
-    grocy = GrocyApi(**config['grocy'], dry_run=args.dry_run)
-    args.func(args, config, grocy)
+    config.read(config_path)
+    try:
+        grocy = GrocyApi(**config['grocy'], dry_run=args.dry_run)
+    except KeyError:
+        sys.exit(f"Error: Configfile '{config_path}' is missing or incomplete."
+                 )
+    else:
+        args.func(args, config, grocy)
 
 
 if __name__ == '__main__':
