@@ -84,7 +84,8 @@ def simplify(items: Iterable[Purchase]) -> List[Purchase]:
                      name)
             for (name, price), g
             in groupby(sorted(items, key=lambda p: p.name),
-                       lambda p: (p.name, p.price))]
+                       lambda p: (p.name, p.price))
+            if float(price) >= 0]
 
 
 def netto_purchase():
