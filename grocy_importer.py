@@ -142,48 +142,53 @@ def netto_purchase(args) -> list[Purchase]:
 
 @dataclass
 class ReweJsonLineItem:
+    ''' Represents data from "Meine REWE-Shop-Daten.json" '''
     price: int
     quantity: int
     title: str
-    totalPrice: int
+    total_price: int
 
 
 @dataclass
 class ReweJsonSuborder:
-    deliveryType: str
+    ''' Represents data from "Meine REWE-Shop-Daten.json" '''
+    delivery_type: str
     # coupons: fields.List()
     # merchantInfo: object
-    orderType: str
-    paybackNumber: Optional[str]
+    order_type: str
+    payback_number: Optional[str]
     channel: str
     # deliveryAddress: object
-    subOrderValue: int
-    lineItems: list[ReweJsonLineItem]
+    sub_order_value: int
+    line_items: list[ReweJsonLineItem]
     # timeSlot: object
-    additionalEmail: str
-    userComment: str
+    additional_email: str
+    user_comment: str
     merchant: str
 
 
 @dataclass
 class ReweJsonOrder:
+    ''' Represents data from "Meine REWE-Shop-Daten.json" '''
     # payments: fields.List()
     # invoiceAddress: object
-    orderValue: int
-    clientInfo: str
+    order_value: int
+    client_info: str
     # paymentInfo: object
-    subOrders: list[ReweJsonSuborder]
+    sub_orders: list[ReweJsonSuborder]
     # OrderId: str
-    creationDate: str
+    creation_date: str
 
 
 @dataclass
 class ReweJsonOrdersList:
+    ''' Represents data from "Meine REWE-Shop-Daten.json" '''
     orders: list[ReweJsonOrder]
 
 
 @dataclass
 class ReweJson:
+    ''' Represents data from "Meine REWE-Shop-Daten.json" '''
     # addressData: fields.List()
     # deliveryflats: fields.List()
     # payback: object
@@ -192,99 +197,101 @@ class ReweJson:
     orders: ReweJsonOrdersList
     # coupons: object
 
+    def sorted_orders(self) -> list[ReweJsonOrder]:
+        ''' Sort orders by creation_date '''
+        return sorted(self.orders.orders,
+                      key=lambda x: x.creation_date, reverse=True)
+
+    def list_orders(self) -> Iterable[str]:
+        ''' Format and sort orders for displaying to human '''
+        for i, orde in enumerate(self.sorted_orders()):
+            date = orde.creation_date
+            value = orde.order_value
+            merchant = orde.sub_orders[0].merchant
+            yield(f'{i+1}. {date[:4]}-{date[4:6]}-{date[6:8]} {merchant}'
+                  f' {int(value) / 100} €')
+
 
 class ReweJsonLineItemSchema(Schema):
-    class Meta:
-        unknown = EXCLUDE
+    ''' Represents data from "Meine REWE-Shop-Daten.json" '''
     price = fields.Integer()
     quantity = fields.Integer()
     title = fields.Str()
-    totalPrice = fields.Integer()
+    total_price = fields.Integer(data_key="totalPrice")
 
     @post_load
-    def make(self, data, **kwargs) -> ReweJsonLineItem:
+    def make(self, data, **_) -> ReweJsonLineItem:
+        ''' Create instance from deserialized data '''
         return ReweJsonLineItem(**data)
 
 
 class ReweJsonSuborderSchema(Schema):
-    class Meta:
-        unknown = EXCLUDE
-    deliveryType = fields.Str()
+    ''' Represents data from "Meine REWE-Shop-Daten.json" '''
+    delivery_type = fields.Str(data_key="deliveryType")
     # coupons = fields.List()
     # merchantInfo: object
-    orderType = fields.Str()
-    paybackNumber = fields.Str(allow_none=True)
+    order_type = fields.Str(data_key="orderType")
+    payback_number = fields.Str(allow_none=True, data_key="paybackNumber")
     channel = fields.Str()
     # deliveryAddress: object
-    subOrderValue = fields.Integer()
-    lineItems = fields.List(fields.Nested(ReweJsonLineItemSchema,
-                                          unkown=EXCLUDE))
+    sub_order_value = fields.Integer(data_key="subOrderValue")
+    line_items = fields.List(fields.Nested(ReweJsonLineItemSchema,
+                                           unknown=EXCLUDE),
+                             data_key="lineItems")
     # timeSlot: object
-    additionalEmail = fields.Str()
-    userComment = fields.Str()
+    additional_email = fields.Str(data_key="additionalEmail")
+    user_comment = fields.Str(data_key="userComment")
     merchant = fields.Str()
 
     @post_load
-    def make(self, data, **kwargs) -> ReweJsonSuborder:
+    def make(self, data, **_) -> ReweJsonSuborder:
+        ''' Create instance from deserialized data '''
         return ReweJsonSuborder(**data)
 
 
 class ReweJsonOrderSchema(Schema):
-    class Meta:
-        unknown = EXCLUDE
+    ''' Represents data from "Meine REWE-Shop-Daten.json" '''
     # payments = fields.List()
     # invoiceAddress: object
-    orderValue = fields.Integer()
-    clientInfo = fields.Str()
+    order_value = fields.Integer(data_key="orderValue")
+    client_info = fields.Str(data_key="clientInfo")
     # paymentInfo: object
-    subOrders = fields.List(fields.Nested(ReweJsonSuborderSchema,
-                                          unkown=EXCLUDE))
+    sub_orders = fields.List(fields.Nested(ReweJsonSuborderSchema,
+                                           unknown=EXCLUDE),
+                             data_key="subOrders")
     # OrderId = fields.Str()
-    creationDate = fields.Str()
+    creation_date = fields.Str(data_key="creationDate")
 
     @post_load
-    def make(self, data, **kwargs) -> ReweJsonOrder:
+    def make(self, data, **_) -> ReweJsonOrder:
+        ''' Create instance from deserialized data '''
         return ReweJsonOrder(**data)
 
 
 class ReweJsonOrdersListSchema(Schema):
-    class Meta:
-        unknown = EXCLUDE
-    orders = fields.List(fields.Nested(ReweJsonOrderSchema, unkown=EXCLUDE))
+    ''' Represents data from "Meine REWE-Shop-Daten.json" '''
+    orders = fields.List(fields.Nested(ReweJsonOrderSchema, unknown=EXCLUDE))
 
     @post_load
-    def make(self, data, **kwargs) -> ReweJsonOrdersList:
+    def make(self, data, **_) -> ReweJsonOrdersList:
+        ''' Create instance from deserialized data '''
         return ReweJsonOrdersList(**data)
 
 
 class ReweJsonSchema(Schema):
-    class Meta:
-        unknown = EXCLUDE
+    ''' Represents data from "Meine REWE-Shop-Daten.json" '''
     # addressData = fields.List()
     # deliveryflats = fields.List()
     # payback: object
     # customerData: object
     # paymentData: object
-    orders = fields.Nested(ReweJsonOrdersListSchema, unkown=EXCLUDE)
+    orders = fields.Nested(ReweJsonOrdersListSchema, unknown=EXCLUDE)
     # coupons: object
 
     @post_load
-    def make(self, data, **kwargs) -> ReweJson:
+    def make(self, data, **__) -> ReweJson:
+        ''' Create instance from deserialized data '''
         return ReweJson(**data)
-
-
-def sorted_orders(data: ReweJson) -> list[ReweJsonOrder]:
-    return sorted(data.orders.orders,
-                  key=lambda x: x.creationDate, reverse=True)
-
-
-def list_orders(data: ReweJson):
-    for i, orde in enumerate(sorted_orders(data)):
-        date = orde.creationDate
-        value = orde.orderValue
-        merchant = orde.subOrders[0].merchant
-        print(f'{i+1}. {date[:4]}-{date[4:6]}-{date[6:8]} {merchant}'
-              f' {int(value) / 100} €')
 
 
 def list_rewe_purchases(args, *_) -> None:
@@ -292,7 +299,9 @@ def list_rewe_purchases(args, *_) -> None:
 
     List purchases from the German supermarket chain REWE
     '''
-    list_orders(ReweJsonSchema().load(json.load(args.file)))
+    print('\n'.join(ReweJsonSchema(unknown=EXCLUDE).load(json.load(args.file),
+                                                         unknown=EXCLUDE
+                                                         ).list_orders()))
 
 
 def get_argparser() -> ArgumentParser:
