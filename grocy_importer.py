@@ -2,10 +2,11 @@
 
 ''' Help importing into Grocy '''
 
+from argparse import ArgumentParser, FileType
 import re
 from sys import argv
 from email.parser import Parser
-from typing import Union, Iterable
+from typing import Union, Iterable, TextIO
 from dataclasses import dataclass
 from itertools import groupby
 from configparser import ConfigParser
@@ -102,10 +103,13 @@ def simplify(items: Iterable[Purchase]) -> list[Purchase]:
             if float(price) >= 0]
 
 
-def netto_purchase():
-    ''' import a 'digitaler Kassenbon' email '''
-    with open(argv[1], 'r', encoding='utf-8') as fil:
-        email = Parser().parse(fil)
+def netto_purchase(file: TextIO):
+    ''' Import from Netto Marken-Discount
+
+    Import a "digitaler Kassenbon" email from the german discount
+    supermarket chain Netto Marken-Discount
+    '''
+    email = Parser().parse(file)
     html = list(part
                 for part in email.walk()
                 if part.get_content_type() == 'text/html'
@@ -131,12 +135,30 @@ def netto_purchase():
     return simplify(parse_purchase(item) for item in items if len(item) > 1)
 
 
-def main():
-    ''' Run the CLI program '''
-    config = ConfigParser()
-    config.read(join(dirname(abspath(argv[0])), 'config.ini'))
-    groceries = netto_purchase()
-    grocy = GrocyApi(**config['grocy'])
+def get_argparser() -> ArgumentParser:
+    ''' ArgumentParser factory method '''
+    parser = ArgumentParser(description='Help importing into Grocy')
+    subparsers = parser.add_subparsers()
+    purchase = subparsers.add_parser('purchase',
+                                     help='import purchases')
+    purchase.set_defaults(func=import_purchase)
+    purchase_store = purchase.add_subparsers(metavar='STORE',
+                                             required=True,
+                                             dest='store')
+    purchase_store.add_parser('netto',
+                              help='import a "digitaler Kassenbon" email from'
+                                   ' the german discount supermarket chain'
+                                   ' Netto Marken-Discount')
+    purchase.add_argument('file',
+                          type=FileType('r', encoding='utf-8'))
+    return parser
+
+
+def import_purchase(args,
+                    config: ConfigParser,
+                    grocy: GrocyApi):
+    ''' help importing multiple purchases into grocy '''
+    groceries = netto_purchase(args.file)
     known_products = grocy.get_all_products()
     while any(unknown_items := [str(item)
                                 for item in groceries
@@ -150,8 +172,18 @@ def main():
         grocy.purchase(pro['id'],
                        item.amount * float(pro['qu_factor_purchase_to_stock']),
                        item.price,
-                       config['netto']['shopping_location_id'])
+                       int(config[args.store]['shopping_location_id'])
+                       )
         print(f'Added {item}')
+
+
+def main():
+    ''' Run the CLI program '''
+    args = get_argparser().parse_args()
+    config = ConfigParser()
+    config.read(join(dirname(abspath(argv[0])), 'config.ini'))
+    grocy = GrocyApi(**config['grocy'])
+    args.func(args, config, grocy)
 
 
 if __name__ == '__main__':
