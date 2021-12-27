@@ -2,10 +2,13 @@
 
 ''' Help importing into Grocy '''
 
+from __future__ import annotations
+
 from argparse import ArgumentParser, FileType
 import re
 from email.parser import Parser
-from typing import Union, Iterable, Optional, TextIO, TypedDict
+from typing import (Union, Iterable, Optional, TextIO, TypedDict, Literal,
+                    Callable, cast, Any)
 from dataclasses import dataclass
 from itertools import groupby
 from configparser import ConfigParser
@@ -21,6 +24,31 @@ from appdirs import user_config_dir
 
 class UserError(Exception):
     ''' Exception that we display to the human '''
+
+
+class AppConfigGrocySection(TypedDict):
+    ''' [grocy]-section of our config.ini '''
+    base_url: str
+    api_key: str
+
+
+class AppConfigPurchaseSection(TypedDict):
+    ''' Common options for purchase-section of our config.ini
+
+    e.g. [rewe] or [netto]
+    '''
+    shopping_location_id: int
+
+
+class AppConfigRequired(TypedDict):
+    ''' Structure of our config.ini '''
+    grocy: AppConfigGrocySection
+
+
+class AppConfig(AppConfigRequired, total=False):
+    ''' Structure of our config.ini '''
+    netto: AppConfigPurchaseSection
+    rewe: AppConfigPurchaseSection
 
 
 class GrocyProduct(TypedDict):
@@ -53,7 +81,7 @@ class GrocyApi:
         ''' all shopping locations known to grocy '''
         response = requests.get(self.base_url + '/objects/products',
                                 headers=self.headers)
-        return response.json()
+        return cast(Iterable[GrocyShoppingLocation], response.json())
 
     def purchase(self, product_id: int, amount: float, price: str,
                  shopping_location_id: int) -> None:
@@ -70,6 +98,16 @@ class GrocyApi:
                                        shopping_location_id
                                        })
         assert response.status_code//100 == 2
+
+
+@dataclass
+class AppArgs:
+    ''' Structure of our CLI args '''
+    dry_run: bool
+    store: Literal['netto', 'rewe']
+    file: TextIO
+    func: Callable[[AppArgs, AppConfig, GrocyApi], None]
+    order: int
 
 
 def cleanup_product_name(orig: str) -> str:
@@ -131,11 +169,11 @@ def simplify(items: Iterable[Purchase]) -> list[Purchase]:
             if float(price) >= 0]
 
 
-def rewe_purchase(args) -> list[Purchase]:
+def rewe_purchase(args: AppArgs) -> list[Purchase]:
     ''' Import from REWE '''
     data = ReweJsonSchema.load_from_json_file(args.file)
     return [Purchase(line_item.quantity,
-                     line_item.total_price,
+                     f"{line_item.total_price / 100:.2f}",
                      line_item.title)
             for line_item in data.sorted_orders()[args.order-1
                                                   ].sub_orders[0].line_items
@@ -144,7 +182,7 @@ def rewe_purchase(args) -> list[Purchase]:
                                        'Getränke-Sperrgutaufschlag']]
 
 
-def netto_purchase(args) -> list[Purchase]:
+def netto_purchase(args: AppArgs) -> list[Purchase]:
     ''' Import from Netto Marken-Discount
 
     Import a "digitaler Kassenbon" email from the German discount
@@ -256,7 +294,7 @@ class ReweJsonLineItemSchema(Schema):
     total_price = fields.Integer(data_key="totalPrice")
 
     @post_load
-    def make(self, data, **_) -> ReweJsonLineItem:
+    def make(self, data: Any, **_: Any) -> ReweJsonLineItem:
         ''' Create instance from deserialized data '''
         return ReweJsonLineItem(**data)
 
@@ -280,7 +318,7 @@ class ReweJsonSuborderSchema(Schema):
     merchant = fields.Str()
 
     @post_load
-    def make(self, data, **_) -> ReweJsonSuborder:
+    def make(self, data: Any, **_: Any) -> ReweJsonSuborder:
         ''' Create instance from deserialized data '''
         return ReweJsonSuborder(**data)
 
@@ -299,7 +337,7 @@ class ReweJsonOrderSchema(Schema):
     creation_date = fields.Str(data_key="creationDate")
 
     @post_load
-    def make(self, data, **_) -> ReweJsonOrder:
+    def make(self, data: Any, **_: Any) -> ReweJsonOrder:
         ''' Create instance from deserialized data '''
         return ReweJsonOrder(**data)
 
@@ -309,7 +347,7 @@ class ReweJsonOrdersListSchema(Schema):
     orders = fields.List(fields.Nested(ReweJsonOrderSchema, unknown=EXCLUDE))
 
     @post_load
-    def make(self, data, **_) -> ReweJsonOrdersList:
+    def make(self, data: Any, **_: Any) -> ReweJsonOrdersList:
         ''' Create instance from deserialized data '''
         return ReweJsonOrdersList(**data)
 
@@ -327,16 +365,17 @@ class ReweJsonSchema(Schema):
     @staticmethod
     def load_from_json_file(file: TextIO) -> ReweJson:
         ''' Load data from given json file '''
-        return ReweJsonSchema(unknown=EXCLUDE).load(json.load(file),
-                                                    unknown=EXCLUDE)
+        return cast(ReweJson,
+                    ReweJsonSchema(unknown=EXCLUDE).load(json.load(file),
+                                                         unknown=EXCLUDE))
 
     @post_load
-    def make(self, data, **__) -> ReweJson:
+    def make(self, data: Any, **_: Any) -> ReweJson:
         ''' Create instance from deserialized data '''
         return ReweJson(**data)
 
 
-def list_rewe_purchases(args, *_) -> None:
+def list_rewe_purchases(args: AppArgs, *_: Any) -> None:
     ''' List purchases from REWE
 
     List purchases from the German supermarket chain REWE
@@ -403,8 +442,8 @@ def find_shopping_location_for(store: str,
         raise UserError(f"No shopping location found for '{store}'.") from ex
 
 
-def get_shopping_location_id(store: str,
-                             config: ConfigParser,
+def get_shopping_location_id(store: Literal['netto', 'rewe'],
+                             config: AppConfig,
                              grocy: GrocyApi
                              ) -> int:
     ''' grocy's shopping location id '''
@@ -416,9 +455,9 @@ def get_shopping_location_id(store: str,
                                           )['id']
 
 
-def import_purchase(args,
-                    config: ConfigParser,
-                    grocy: GrocyApi):
+def import_purchase(args: AppArgs,
+                    config: AppConfig,
+                    grocy: GrocyApi) -> None:
     ''' help importing multiple purchases into grocy '''
     stores = {'netto': netto_purchase,
               'rewe': rewe_purchase}
@@ -442,13 +481,14 @@ def import_purchase(args,
         print(f'Added {item}')
 
 
-def main():
+def main() -> None:
     ''' Run the CLI program '''
-    args = get_argparser().parse_args()
+    args = cast(AppArgs, get_argparser().parse_args())
     config_path = join(user_config_dir('grocy-importer', 'adaschma.name'),
                        'config.ini')
-    config = ConfigParser()
-    config.read(config_path)
+    config_parser = ConfigParser()
+    config_parser.read(config_path)
+    config = cast(AppConfig, config_parser)
     try:
         grocy = GrocyApi(**config['grocy'], dry_run=args.dry_run)
     except KeyError as ex:
