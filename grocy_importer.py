@@ -55,12 +55,30 @@ class GrocyProduct(TypedDict):
     ''' A product as returned from the Grocy API '''
     id: int
     qu_factor_purchase_to_stock: float
+    qu_id_stock: int
 
 
 class GrocyShoppingLocation(TypedDict):
     ''' A shopping location as returned from the Grocy API '''
     id: int
     name: str
+
+
+class GrocyQuantityUnit(TypedDict):
+    ''' A quantity unit as returned from the Grocy API '''
+    id: int
+    name: str
+    name_plural: str
+    plural_forms: Optional[str]
+
+
+class GrocyQUnitConvertion(TypedDict):
+    ''' A quantity unit convertion as returned from the Grocy API '''
+    id: int
+    from_qu_id: int
+    to_qu_id: int
+    product_id: Optional[int]
+    factor: float
 
 
 class GrocyApi:
@@ -82,6 +100,20 @@ class GrocyApi:
         response = requests.get(self.base_url + '/objects/products',
                                 headers=self.headers)
         return cast(Iterable[GrocyShoppingLocation], response.json())
+
+    def get_all_quantity_units(self) -> Iterable[GrocyQuantityUnit]:
+        ''' all quantity units known to grocy '''
+        response = requests.get(self.base_url + '/objects/quantity_units',
+                                headers=self.headers)
+        return cast(Iterable[GrocyQuantityUnit], response.json())
+
+    def get_all_quantity_unit_convertions(self
+                                          ) -> Iterable[GrocyQUnitConvertion]:
+        ''' all quantity unit convertions known to grocy '''
+        response = requests.get(self.base_url
+                                + '/objects/quantity_unit_conversions',
+                                headers=self.headers)
+        return cast(Iterable[GrocyQUnitConvertion], response.json())
 
     def purchase(self, product_id: int, amount: float, price: str,
                  shopping_location_id: int) -> None:
@@ -108,11 +140,12 @@ class AppArgs:
     file: TextIO
     func: Callable[[AppArgs, AppConfig, GrocyApi], None]
     order: int
+    url: str
 
 
-def cleanup_product_name(orig: str) -> str:
+def normanlize_white_space(orig: str) -> str:
     ''' Remove multiple white space '''
-    return re.sub(r'\s+', ' ', orig)
+    return re.sub(r'\s+', ' ', orig).strip()
 
 
 @dataclass
@@ -127,11 +160,11 @@ def parse_purchase(args: list[str]) -> Purchase:
     ''' Parse a Netto store purchase '''
     return (Purchase(1,
                      from_netto_price(args[1]),
-                     cleanup_product_name(args[0]))
+                     normanlize_white_space(args[0]))
             if len(args) == 2
             else Purchase(float(args[0].split()[0]),
                           from_netto_price(args[2]),
-                          cleanup_product_name(args[1])))
+                          normanlize_white_space(args[1])))
 
 
 def from_netto_price(netto_price: str) -> str:
@@ -375,6 +408,132 @@ class ReweJsonSchema(Schema):
         return ReweJson(**data)
 
 
+@dataclass
+class UnparseableIngredient:
+    ''' Represents an ingredient as listed in a recipe from the web. '''
+    full: str
+
+
+@dataclass
+class Ingredient:
+    ''' Represents an ingredient as listed in a recipe from the web. '''
+    amount: str
+    unit: str
+    name: str
+    full: str
+
+    @staticmethod
+    def parse(text: str) -> Union[Ingredient, UnparseableIngredient]:
+        '''
+        >>> Ingredient.parse('asdfag')
+        UnparseableIngredient(full='asdfag')
+        >>> Ingredient.parse('6 Knoblauchzehen')
+        ... #doctest: +NORMALIZE_WHITESPACE
+        Ingredient(amount='6', unit='', name='Knoblauchzehen',
+                   full='6 Knoblauchzehen')
+        >>> Ingredient.parse('750 g Wasser')
+        Ingredient(amount='750', unit='g', name='Wasser', full='750 g Wasser')
+        >>> Ingredient.parse('140 g Urdbohnen, getrocknet (Linsenbohnen)')
+        ... #doctest: +NORMALIZE_WHITESPACE
+        Ingredient(amount='140', unit='g', name='Urdbohnen',
+                   full='140 g Urdbohnen, getrocknet (Linsenbohnen)')
+        >>> Ingredient.parse('20 g Ingwer, geschält, in Scheiben (2 mm)')
+        ... #doctest: +NORMALIZE_WHITESPACE
+        Ingredient(amount='20', unit='g', name='Ingwer',
+                   full='20 g Ingwer, geschält, in Scheiben (2 mm)')
+        >>> Ingredient.parse('50 - 70 g Crème double (ca. 48 % Fett)'
+        ...                  ' und mehr zum Servieren')
+        ... #doctest: +NORMALIZE_WHITESPACE
+        Ingredient(amount='50 - 70', unit='g', name='Crème double',
+                   full='50 - 70 g Crème double (ca. 48 % Fett) und mehr
+                         zum Servieren')
+        >>> Ingredient.parse('1 Zwiebel, halbiert')
+        ... #doctest: +NORMALIZE_WHITESPACE
+        Ingredient(amount='1', unit='',
+                   name='Zwiebel', full='1 Zwiebel, halbiert')
+        >>> Ingredient.parse('½ TL Muskat')
+        Ingredient(amount='½', unit='TL', name='Muskat', full='½ TL Muskat')
+        >>> Ingredient.parse('¼ TL Cayenne-Pfeffer, gemahlen')
+        ... #doctest: +NORMALIZE_WHITESPACE
+        Ingredient(amount='¼', unit='TL', name='Cayenne-Pfeffer',
+                   full='¼ TL Cayenne-Pfeffer, gemahlen')
+        >>> Ingredient.parse('¾ TL Thymian, getrocknet (optional)')
+        ... #doctest: +NORMALIZE_WHITESPACE
+        Ingredient(amount='¾', unit='TL', name='Thymian',
+                   full='¾ TL Thymian, getrocknet (optional)')
+        '''
+        match = re.search(r'^\s*(¼|½|¾|\d+(?:\s+\-\s+\d+)?)'
+                          r'(?:\s+(\S*[^\s,]))?'
+                          r'(?:\s+([^,(]*[^,(\s]).*)$',
+                          text)
+        if match is None:
+            return UnparseableIngredient(text)
+        return Ingredient(match.group(1), match.group(2) or '', match.group(3) or '',
+                          match.group(0))
+
+
+def recipe_ingredients_checker(args: AppArgs,
+                               _: AppConfig,
+                               grocy: GrocyApi) -> None:
+    ''' assist importing recipes from the web
+
+    Check if ingredients and their units are known to grocy for a recipe to be
+    imported
+    '''
+    response = requests.get(args.url)
+    soup = BeautifulSoup(response.text, 'html5lib')
+    ingredients = [Ingredient.parse(normanlize_white_space(item.get_text()))
+                   for item in soup.select('core-list-section ul li')]
+    print(f"Found {len(ingredients)} ingredients")
+    products = grocy.get_all_products()
+    units = grocy.get_all_quantity_units()
+    convertions = grocy.get_all_quantity_unit_convertions()
+    product_known = []
+    product_unknown = []
+    for ingred in ingredients:
+        if (isinstance(ingred, UnparseableIngredient)
+                or ingred.name not in products
+                and ingred.name != ''):
+            product_unknown.append(ingred)
+        else:
+            product_known.append(ingred)
+    matching_units = [(ingred, [unit
+                                for unit in units
+                                if ingred.unit in [unit['name'],
+                                                   unit['name_plural']]
+                                ])
+                      for ingred in product_known]
+    unit_convertion_unknown = [ingred
+                               for ingred, units in matching_units
+                               if any(units)
+                               and not any(u['id'] == products[ingred.name
+                                                               ]['qu_id_stock']
+                                           for u in units)
+                               and not any(u['id'] == c['from_qu_id']
+                                           and c['to_qu_id']
+                                           == products[ingred.name
+                                                       ]['qu_id_stock']
+                                           and c['product_id'
+                                                 ] in [products[ingred.name
+                                                                ]['id'],
+                                                       None]
+                                           for u in units
+                                           for c in convertions)]
+    # from_qu_id: int
+    # to_qu_id: int
+    # product_id: Optional[int]
+
+    print('Unknown ingredients:')
+    print('\n'.join(str(ingred) for ingred in product_unknown))
+    print('\nUnknown units:')
+    print('\n'.join(str(ingred)
+                    for ingred, units in matching_units
+                    if not any(units)))
+    print('\nUnknown unit convertion:')
+    print('\n'.join(str(ingred)
+                    for ingred in unit_convertion_unknown))
+
+
 def list_rewe_purchases(args: AppArgs, *_: Any) -> None:
     ''' List purchases from REWE
 
@@ -390,6 +549,14 @@ def get_argparser() -> ArgumentParser:
     parser.add_argument('--dry-run', action='store_true',
                         help='perform a trial run with no changes made')
     subparsers = parser.add_subparsers()
+    recipe = subparsers.add_parser('recipe',
+                                   description='Check if ingredients and their'
+                                               ' units are known to grocy for'
+                                               ' a recipe to be imported',
+                                   help='assist importing recipes from the web'
+                                   )
+    recipe.add_argument('url')
+    recipe.set_defaults(func=recipe_ingredients_checker)
     purchase = subparsers.add_parser('purchase', help='import purchases')
     purchase_store = purchase.add_subparsers(metavar='STORE',
                                              required=True,
