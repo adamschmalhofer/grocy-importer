@@ -54,8 +54,17 @@ class AppConfig(AppConfigRequired, total=False):
 class GrocyProduct(TypedDict):
     ''' A product as returned from the Grocy API '''
     id: int
+    name: str
     qu_factor_purchase_to_stock: float
     qu_id_stock: int
+    product_group_id: int
+
+
+class GrocyProductGroup(TypedDict):
+    ''' A product group as returned from the Grocy API '''
+    id: int
+    name: str
+    description: str
 
 
 class GrocyShoppingLocation(TypedDict):
@@ -81,6 +90,17 @@ class GrocyQUnitConvertion(TypedDict):
     factor: float
 
 
+class GrocyShoppingListItem(TypedDict):
+    ''' A shopping list item as returned from the Grocy API '''
+    id: int
+    product_id: int
+    note: Optional[str]
+    amount: int
+    shopping_list_id: int
+    done: bool
+    qu_id: int
+
+
 class GrocyApi:
     ''' Calls to the Grocy REST-API '''
 
@@ -95,6 +115,18 @@ class GrocyApi:
                                 headers=self.headers)
         return {p['name']: p for p in response.json()}
 
+    def get_all_products_by_id(self) -> dict[int, GrocyProduct]:
+        ''' all products known to grocy '''
+        response = requests.get(self.base_url + '/objects/products',
+                                headers=self.headers)
+        return {p['id']: p for p in response.json()}
+
+    def get_all_product_groups(self) -> dict[int, GrocyProductGroup]:
+        ''' all product groups known to grocy '''
+        response = requests.get(self.base_url + '/objects/product_groups',
+                                headers=self.headers)
+        return {p['id']: p for p in response.json()}
+
     def get_all_shopping_locations(self) -> Iterable[GrocyShoppingLocation]:
         ''' all shopping locations known to grocy '''
         response = requests.get(self.base_url + '/objects/products',
@@ -107,6 +139,12 @@ class GrocyApi:
                                 headers=self.headers)
         return cast(Iterable[GrocyQuantityUnit], response.json())
 
+    def get_all_quantity_units_by_id(self) -> dict[int, GrocyQuantityUnit]:
+        ''' all quantity units known to grocy '''
+        response = requests.get(self.base_url + '/objects/quantity_units',
+                                headers=self.headers)
+        return {p['id']: p for p in response.json()}
+
     def get_all_quantity_unit_convertions(self
                                           ) -> Iterable[GrocyQUnitConvertion]:
         ''' all quantity unit convertions known to grocy '''
@@ -114,6 +152,13 @@ class GrocyApi:
                                 + '/objects/quantity_unit_conversions',
                                 headers=self.headers)
         return cast(Iterable[GrocyQUnitConvertion], response.json())
+
+    def get_all_shopping_list(self) -> Iterable[GrocyShoppingListItem]:
+        ''' all items on shopping lists '''
+        response = requests.get(self.base_url
+                                + '/objects/shopping_list',
+                                headers=self.headers)
+        return cast(Iterable[GrocyShoppingListItem], response.json())
 
     def purchase(self, product_id: int, amount: float, price: str,
                  shopping_location_id: int) -> None:
@@ -468,7 +513,9 @@ class Ingredient:
                           text)
         if match is None:
             return UnparseableIngredient(text)
-        return Ingredient(match.group(1), match.group(2) or '', match.group(3) or '',
+        return Ingredient(match.group(1),
+                          match.group(2) or '',
+                          match.group(3) or '',
                           match.group(0))
 
 
@@ -549,6 +596,10 @@ def get_argparser() -> ArgumentParser:
     parser.add_argument('--dry-run', action='store_true',
                         help='perform a trial run with no changes made')
     subparsers = parser.add_subparsers()
+    shoppinglist = subparsers.add_parser('shopping-list',
+                                         help='export shopping list in'
+                                              ' todo.txt format')
+    shoppinglist.set_defaults(func=export_shopping_list)
     recipe = subparsers.add_parser('recipe',
                                    description='Check if ingredients and their'
                                                ' units are known to grocy for'
@@ -646,6 +697,41 @@ def import_purchase(args: AppArgs,
                        shopping_location
                        )
         print(f'Added {item}')
+
+
+def format_shopping_list_item(item: GrocyShoppingListItem,
+                              known_products: dict[int, GrocyProduct],
+                              units: dict[int, GrocyQuantityUnit],
+                              groups: dict[int, GrocyProductGroup]
+                              ) -> str:
+    ''' Format shopping list item in todo.txt format '''
+    product = known_products[item["product_id"]]
+    name = product["name"]
+    unit = units[item["qu_id"]]["name_plural"]
+    try:
+        group = ' +' + groups[product["product_group_id"]]["name"]
+    except KeyError:
+        group = ''
+    return f'{name} count:{item["amount"]}{unit}{group}'
+
+
+def export_shopping_list(_: AppArgs,
+                         __: AppConfig,
+                         grocy: GrocyApi) -> None:
+    ''' export shopping list to todo.txt '''
+    known_products = grocy.get_all_products_by_id()
+    shopping_list = grocy.get_all_shopping_list()
+    units = grocy.get_all_quantity_units_by_id()
+    groups = grocy.get_all_product_groups()
+
+    def product_group_id(item: GrocyShoppingListItem) -> int:
+        return known_products[item['product_id']]['product_group_id'] or 0
+
+    print('\n'.join(format_shopping_list_item(item,
+                                              known_products,
+                                              units,
+                                              groups)
+                    for item in sorted(shopping_list, key=product_group_id)))
 
 
 def main() -> None:
