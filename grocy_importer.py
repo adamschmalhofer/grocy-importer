@@ -506,8 +506,12 @@ class Ingredient:
         ... #doctest: +NORMALIZE_WHITESPACE
         Ingredient(amount='¾', unit='TL', name='Thymian',
                    full='¾ TL Thymian, getrocknet (optional)')
+        >>> Ingredient.parse('3 ½ TL Salz')
+        ... #doctest: +NORMALIZE_WHITESPACE
+        Ingredient(amount='3 ½', unit='TL', name='Salz',
+                   full='3 ½ TL Salz')
         '''
-        match = re.search(r'^\s*(¼|½|¾|\d+(?:\s+\-\s+\d+)?)'
+        match = re.search(r'^\s*(¼|½|¾|\d+(?:\s+(?:\-\s+\d+|½))?)'
                           r'(?:\s+(\S*[^\s,]))?'
                           r'(?:\s+([^,(]*[^,(\s]).*)$',
                           text)
