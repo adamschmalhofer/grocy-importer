@@ -129,7 +129,7 @@ class GrocyApi:
 
     def get_all_shopping_locations(self) -> Iterable[GrocyShoppingLocation]:
         ''' all shopping locations known to grocy '''
-        response = requests.get(self.base_url + '/objects/products',
+        response = requests.get(self.base_url + '/objects/shopping_locations',
                                 headers=self.headers)
         return cast(Iterable[GrocyShoppingLocation], response.json())
 
@@ -716,7 +716,7 @@ def format_shopping_list_item(item: GrocyShoppingListItem,
         group = ' +' + groups[product["product_group_id"]]["name"]
     except KeyError:
         group = ''
-    return f'{name} count:{item["amount"]}{unit}{group}'
+    return f'{name}, {item["amount"]}{unit}{group}'
 
 
 def export_shopping_list(_: AppArgs,
