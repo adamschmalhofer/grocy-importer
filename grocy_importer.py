@@ -716,7 +716,7 @@ def format_shopping_list_item(item: GrocyShoppingListItem,
         group = ' +' + groups[product["product_group_id"]]["name"]
     except KeyError:
         group = ''
-    return f'{name}, {item["amount"]}{unit}{group}'
+    return f'{name}, {item["amount"]}{unit}'
 
 
 def export_shopping_list(_: AppArgs,
