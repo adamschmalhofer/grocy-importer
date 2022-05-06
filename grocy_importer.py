@@ -15,6 +15,7 @@ from configparser import ConfigParser
 from os.path import join
 import sys
 import json
+from functools import partial
 
 from bs4 import BeautifulSoup
 import requests
@@ -49,6 +50,17 @@ class AppConfig(AppConfigRequired, total=False):
     ''' Structure of our config.ini '''
     netto: AppConfigPurchaseSection
     rewe: AppConfigPurchaseSection
+
+
+class GrocyProductBarCode(TypedDict):
+    ''' A product barcode as returned from the Grocy API '''
+    id: int
+    product_id: int
+    barcode: str
+    qu_id: int
+    amount: int
+    shopping_location_id: int
+    note: str
 
 
 class GrocyProduct(TypedDict):
@@ -108,6 +120,12 @@ class GrocyApi:
         self.headers = {'GROCY-API-KEY': api_key}
         self.base_url = base_url
         self.dry_run = dry_run
+
+    def get_all_product_barcodes(self) -> dict[str, GrocyProductBarCode]:
+        ''' all product barcodes known to grocy '''
+        response = requests.get(self.base_url + '/objects/product_barcodes',
+                                headers=self.headers)
+        return {p['barcode']: p for p in response.json()}
 
     def get_all_products(self) -> dict[str, GrocyProduct]:
         ''' all products known to grocy '''
@@ -677,6 +695,54 @@ def get_shopping_location_id(store: Literal['netto', 'rewe'],
                                           )['id']
 
 
+def convert_unit(convertions: Iterable[GrocyQUnitConvertion],
+                 from_qu_id: int,
+                 to_qu_id: int,
+                 product_id: Optional[int]
+                 ) -> float:
+    '''
+    The factor for a unit convertion for a given product.
+
+    >>> convert_unit([], 42, 42, None)
+    1
+    >>> convert_unit([{'id': 1, 'from_qu_id': 7, 'to_qu_id': 42,
+    ...                'product_id': None, 'factor': 1.5}
+    ...              ], 7, 42, None)
+    1.5
+    >>> convert_unit([{'id': 1, 'from_qu_id': 7, 'to_qu_id': 42,
+    ...                'product_id': 121, 'factor': 3.5}
+    ...              ], 7, 42, 121)
+    3.5
+    >>> convert_unit([{'id': 1, 'from_qu_id': 7, 'to_qu_id': 42,
+    ...                'product_id': 121, 'factor': 3.5},
+    ...               {'id': 1, 'from_qu_id': 7, 'to_qu_id': 42,
+    ...                'product_id': None, 'factor': 1.5},
+    ...              ], 7, 42, 121)
+    3.5
+    >>> convert_unit([{'id': 1, 'from_qu_id': 7, 'to_qu_id': 42,
+    ...                'product_id': 121, 'factor': 3.5},
+    ...               {'id': 1, 'from_qu_id': 7, 'to_qu_id': 42,
+    ...                'product_id': None, 'factor': 1.5},
+    ...              ], 7, 42, None)
+    1.5
+    >>> convert_unit([{'id': 1, 'from_qu_id': 7, 'to_qu_id': 42,
+    ...                'product_id': 121, 'factor': 3.5},
+    ...               {'id': 1, 'from_qu_id': 7, 'to_qu_id': 42,
+    ...                'product_id': None, 'factor': 1.5},
+    ...              ], 7, 42, 144)
+    1.5
+    '''
+    if from_qu_id == to_qu_id:
+        return 1
+    return sorted([c
+                   for c in convertions
+                   if c['from_qu_id'] == from_qu_id
+                   and c['to_qu_id'] == to_qu_id
+                   and c['product_id'] in [None, product_id]],
+                  key=lambda o: o['product_id'] is None
+                  )[0]['factor']
+
+
 def import_purchase(args: AppArgs,
                     config: AppConfig,
                     grocy: GrocyApi) -> None:
@@ -684,19 +750,25 @@ def import_purchase(args: AppArgs,
     stores = {'netto': netto_purchase,
               'rewe': rewe_purchase}
     groceries = stores[args.store](args)
-    known_products = grocy.get_all_products()
+    barcodes = grocy.get_all_product_barcodes()
+    products = grocy.get_all_products_by_id()
     shopping_location = get_shopping_location_id(args.store, config, grocy)
+    factor = partial(convert_unit, grocy.get_all_quantity_unit_convertions())
     while any(unknown_items := [str(item)
                                 for item in groceries
-                                if item.name not in known_products]):
+                                if item.name not in barcodes]):
         print('Unknown products. Please add to grocy:')
         print('\n'.join(unknown_items))
         input('...')
-        known_products = grocy.get_all_products()
+        barcodes = grocy.get_all_product_barcodes()
     for item in groceries:
-        pro = known_products[item.name]
-        grocy.purchase(pro['id'],
-                       item.amount * float(pro['qu_factor_purchase_to_stock']),
+        pro = barcodes[item.name]
+        grocy.purchase(pro['product_id'],
+                       item.amount
+                       * pro['amount']
+                       * factor(pro['qu_id'],
+                                products[pro['product_id']]['qu_id_stock'],
+                                pro['product_id']),
                        item.price,
                        shopping_location
                        )
@@ -706,16 +778,12 @@ def import_purchase(args: AppArgs,
 def format_shopping_list_item(item: GrocyShoppingListItem,
                               known_products: dict[int, GrocyProduct],
                               units: dict[int, GrocyQuantityUnit],
-                              groups: dict[int, GrocyProductGroup]
+                              _: dict[int, GrocyProductGroup]
                               ) -> str:
     ''' Format shopping list item in todo.txt format '''
     product = known_products[item["product_id"]]
     name = product["name"]
     unit = units[item["qu_id"]]["name_plural"]
-    try:
-        group = ' +' + groups[product["product_group_id"]]["name"]
-    except KeyError:
-        group = ''
     return f'{name}, {item["amount"]}{unit}'
 
 
