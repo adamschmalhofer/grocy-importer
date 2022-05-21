@@ -292,7 +292,7 @@ def netto_purchase(args: AppArgs) -> list[Purchase]:
     soup = BeautifulSoup(html, 'html5lib')
     purchase = list(column.get_text()
                     for row
-                    in soup.select(' '.join(8*["tbody"] + ["tr"]))
+                    in soup.select(' '.join(7*["tbody"] + ["tr"]))
                     if not list(row.select('td'))[0].get_text().endswith(':')
                     and not any(keyword in row.get_text()
                                 for keyword in ['Filiale', 'Rabatt',
