@@ -734,13 +734,18 @@ def convert_unit(convertions: Iterable[GrocyQUnitConvertion],
     '''
     if from_qu_id == to_qu_id:
         return 1
-    return sorted([c
-                   for c in convertions
-                   if c['from_qu_id'] == from_qu_id
-                   and c['to_qu_id'] == to_qu_id
-                   and c['product_id'] in [None, product_id]],
-                  key=lambda o: o['product_id'] is None
-                  )[0]['factor']
+    try:
+        return sorted([c
+                       for c in convertions
+                       if c['from_qu_id'] == from_qu_id
+                       and c['to_qu_id'] == to_qu_id
+                       and c['product_id'] in [None, product_id]],
+                      key=lambda o: o['product_id'] is None
+                      )[0]['factor']
+    except IndexError:
+        print(f'No convertion found for {from_qu_id} to {to_qu_id} for'
+              f' {product_id}')
+        raise
 
 
 def import_purchase(args: AppArgs,
@@ -761,17 +766,27 @@ def import_purchase(args: AppArgs,
         print('\n'.join(unknown_items))
         input('...')
         barcodes = grocy.get_all_product_barcodes()
+    grocy_purchases = []
     for item in groceries:
-        pro = barcodes[item.name]
-        grocy.purchase(pro['product_id'],
-                       item.amount
-                       * pro['amount']
-                       * factor(pro['qu_id'],
-                                products[pro['product_id']]['qu_id_stock'],
-                                pro['product_id']),
-                       item.price,
-                       shopping_location
-                       )
+        try:
+            pro = barcodes[item.name]
+            grocy_purchases.append(partial(grocy.purchase,
+                                           pro['product_id'],
+                                           item.amount
+                                           * pro['amount']
+                                           * factor(pro['qu_id'],
+                                                    products[pro['product_id']
+                                                             ]['qu_id_stock'],
+                                                    pro['product_id']),
+                                           item.price,
+                                           shopping_location
+                                           ))
+        except Exception:
+            print(f'Failed {item}')
+            raise
+        print(f'Prepared {item}')
+    for func, item in zip(grocy_purchases, groceries):
+        func()
         print(f'Added {item}')
 
 
