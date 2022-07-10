@@ -756,7 +756,6 @@ def import_purchase(args: AppArgs,
               'rewe': rewe_purchase}
     groceries = stores[args.store](args)
     barcodes = grocy.get_all_product_barcodes()
-    products = grocy.get_all_products_by_id()
     shopping_location = get_shopping_location_id(args.store, config, grocy)
     factor = partial(convert_unit, grocy.get_all_quantity_unit_convertions())
     while any(unknown_items := [str(item)
@@ -766,6 +765,7 @@ def import_purchase(args: AppArgs,
         print('\n'.join(unknown_items))
         input('...')
         barcodes = grocy.get_all_product_barcodes()
+    products = grocy.get_all_products_by_id()
     grocy_purchases = []
     for item in groceries:
         try:
