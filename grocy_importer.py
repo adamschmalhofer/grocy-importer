@@ -16,11 +16,15 @@ from os.path import join
 import sys
 import json
 from functools import partial
+from logging import getLogger
 
 from bs4 import BeautifulSoup
 import requests
 from marshmallow import Schema, fields, EXCLUDE, post_load
 from appdirs import user_config_dir
+
+
+logger = getLogger(__name__)
 
 
 class UserError(Exception):
@@ -553,7 +557,7 @@ def recipe_ingredients_checker(args: AppArgs,
     soup = BeautifulSoup(response.text, 'html5lib')
     ingredients = [Ingredient.parse(normanlize_white_space(item.get_text()))
                    for item in soup.select('core-list-section ul li')]
-    print(f"Found {len(ingredients)} ingredients")
+    logger.info("Found %s ingredients", len(ingredients))
     products = grocy.get_all_products()
     units = grocy.get_all_quantity_units()
     convertions = grocy.get_all_quantity_unit_convertions()
@@ -744,7 +748,7 @@ def convert_unit(convertions: Iterable[GrocyQUnitConvertion],
                       )[0]['factor']
     except IndexError:
         print(f'No convertion found for {from_qu_id} to {to_qu_id} for'
-              f' {product_id}')
+              f' {product_id}', file=sys.stderr)
         raise
 
 
@@ -761,8 +765,8 @@ def import_purchase(args: AppArgs,
     while any(unknown_items := [str(item)
                                 for item in groceries
                                 if item.name not in barcodes]):
-        print('Unknown products. Please add to grocy:')
-        print('\n'.join(unknown_items))
+        print('Unknown products. Please add to grocy:', file=sys.stderr)
+        print('\n'.join(unknown_items), file=sys.stderr)
         input('...')
         barcodes = grocy.get_all_product_barcodes()
     products = grocy.get_all_products_by_id()
@@ -784,7 +788,7 @@ def import_purchase(args: AppArgs,
         except Exception:
             print(f'Failed {item}')
             raise
-        print(f'Prepared {item}')
+        logger.debug('Prepared %s', item)
     for func, item in zip(grocy_purchases, groceries):
         func()
         print(f'Added {item}')
