@@ -182,7 +182,7 @@ class GrocyApi:
                                 headers=self.headers)
         return cast(Iterable[GrocyShoppingListItem], response.json())
 
-    def purchase(self, product_id: int, amount: float, price: str,
+    def purchase(self, product_id: int, amount: float, price: float,
                  shopping_location_id: int) -> None:
         ''' Add a purchase to grocy '''
         if self.dry_run:
@@ -217,9 +217,12 @@ def normanlize_white_space(orig: str) -> str:
 
 @dataclass
 class Purchase:
-    ''' Represents a grocy purchase '''
+    ''' Represents a purchase
+
+    Unlike Grocy the price is that total rather then per unit.
+    '''
     amount: Union[int, float]
-    price: str
+    price: float
     name: str
 
 
@@ -234,12 +237,13 @@ def parse_purchase(args: list[str]) -> Purchase:
                           normanlize_white_space(args[1])))
 
 
-def from_netto_price(netto_price: str) -> str:
+def from_netto_price(netto_price: str) -> float:
     ''' convert from Netto store price format to grocy's '''
-    return netto_price.split()[0].replace(',', '.')
+    return float(netto_price.split()[0].replace(',', '.'))
 
 
-def simplify(items: Iterable[Purchase]) -> list[Purchase]:
+def simplify(items: Iterable[Purchase]
+             ) -> list[Purchase]:
     '''
     >>> simplify([parse_purchase(['Milch', '1,00']),
     ... parse_purchase(['Mehl', '2,00'])])
@@ -273,7 +277,7 @@ def rewe_purchase(args: AppArgs) -> list[Purchase]:
     ''' Import from REWE '''
     data = ReweJsonSchema.load_from_json_file(args.file)
     return [Purchase(line_item.quantity,
-                     f"{line_item.total_price / 100:.2f}",
+                     line_item.total_price / 100,
                      line_item.title)
             for line_item in data.sorted_orders()[args.order-1
                                                   ].sub_orders[0].line_items
@@ -782,7 +786,7 @@ def import_purchase(args: AppArgs,
                                                     products[pro['product_id']
                                                              ]['qu_id_stock'],
                                                     pro['product_id']),
-                                           item.price,
+                                           item.price / item.amount,
                                            shopping_location
                                            ))
         except Exception:
