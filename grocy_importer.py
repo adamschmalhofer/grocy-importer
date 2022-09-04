@@ -382,8 +382,8 @@ class ReweJson:
             date = orde.creation_date
             value = orde.order_value
             merchant = orde.sub_orders[0].merchant
-            yield(f'{i+1}. {date[:4]}-{date[4:6]}-{date[6:8]} {merchant}'
-                  f' {int(value) / 100} €')
+            yield (f'{i+1}. {date[:4]}-{date[4:6]}-{date[6:8]} {merchant}'
+                   f' {int(value) / 100} €')
 
 
 class ReweJsonLineItemSchema(Schema):
