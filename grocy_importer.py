@@ -226,22 +226,6 @@ class Purchase:
     name: str
 
 
-def parse_purchase(args: list[str]) -> Purchase:
-    ''' Parse a Netto store purchase '''
-    return (Purchase(1,
-                     from_netto_price(args[1]),
-                     normanlize_white_space(args[0]))
-            if len(args) == 2
-            else Purchase(float(args[0].split()[0]),
-                          from_netto_price(args[2]),
-                          normanlize_white_space(args[1])))
-
-
-def from_netto_price(netto_price: str) -> float:
-    ''' convert from Netto store price format to grocy's '''
-    return float(netto_price.split()[0].replace(',', '.'))
-
-
 def simplify(items: Iterable[Purchase]
              ) -> list[Purchase]:
     '''
@@ -273,49 +257,175 @@ def simplify(items: Iterable[Purchase]
             if float(price) >= 0]
 
 
-def rewe_purchase(args: AppArgs) -> list[Purchase]:
-    ''' Import from REWE '''
-    data = ReweJsonSchema.load_from_json_file(args.file)
-    return [Purchase(line_item.quantity,
-                     line_item.total_price / 100,
-                     line_item.title)
-            for line_item in data.sorted_orders()[args.order-1
-                                                  ].sub_orders[0].line_items
-            if line_item.title not in ['TimeSlot',
-                                       'Enthaltene Pfandbeträge',
-                                       'Getränke-Sperrgutaufschlag']]
-
-
-def netto_purchase(args: AppArgs) -> list[Purchase]:
-    ''' Import from Netto Marken-Discount
-
-    Import a "digitaler Kassenbon" email from the German discount
-    supermarket chain Netto Marken-Discount
+class Store:
     '''
-    email = Parser().parse(args.file)
-    html = list(part
-                for part in email.walk()
-                if part.get_content_type() == 'text/html'
-                )[0].get_payload(decode=True)
-    soup = BeautifulSoup(html, 'html5lib')
-    purchase = list(column.get_text()
-                    for row
-                    in soup.select(' '.join(7*["tbody"] + ["tr"]))
-                    if not list(row.select('td'))[0].get_text().endswith(':')
-                    and not any(keyword in row.get_text()
-                                for keyword in ['Filiale', 'Rabatt',
-                                                'DeutschlandCard',
-                                                'Punkte-Gutschein'])
-                    for column in row.select('td')
-                    if column.get_text() != ''
-                    )
-    items: list[list[str]] = []
-    for pur in purchase:
-        if pur.isspace():
-            items.append([])
-        else:
-            items[-1].append(pur)
-    return simplify(parse_purchase(item) for item in items if len(item) > 1)
+    '''
+    def get_purchase(self, args: AppArgs) -> list[Purchase]:
+        ...
+
+    def create_subcommand(self,
+                          purchase_store: Any
+                          ) -> None:
+        ...
+
+    def import_purchase(self,
+                        args: AppArgs,
+                        config: AppConfig,
+                        grocy: GrocyApi) -> None:
+        ''' help importing multiple purchases into grocy '''
+        groceries = self.get_purchase(args)
+        barcodes = grocy.get_all_product_barcodes()
+        shopping_location = get_shopping_location_id(args.store, config, grocy)
+        factor = partial(convert_unit,
+                         grocy.get_all_quantity_unit_convertions())
+        while any(unknown_items := [str(item)
+                                    for item in groceries
+                                    if item.name not in barcodes]):
+            print('Unknown products. Please add to grocy:', file=sys.stderr)
+            print('\n'.join(unknown_items), file=sys.stderr)
+            input('...')
+            barcodes = grocy.get_all_product_barcodes()
+        products = grocy.get_all_products_by_id()
+        grocy_purchases = []
+        for item in groceries:
+            try:
+                pro = barcodes[item.name]
+                grocy_purchases.append(partial(grocy.purchase,
+                                               pro['product_id'],
+                                               item.amount
+                                               * pro['amount']
+                                               * factor(pro['qu_id'],
+                                                        products[pro['product_id']
+                                                                 ]['qu_id_stock'],
+                                                        pro['product_id']),
+                                               item.price / item.amount,
+                                               shopping_location
+                                               ))
+            except Exception:
+                print(f'Failed {item}')
+                raise
+            logger.debug('Prepared %s', item)
+        for func, item in zip(grocy_purchases, groceries):
+            func()
+            print(f'Added {item}')
+
+
+class Rewe(Store):
+    'German supermarket chain REWE'
+
+    def create_subcommand(self,
+                          purchase_store: Any
+                          ) -> None:
+        'Import from DSGVO provided "Meine REWE-Shop-Daten.json"'
+        rewe = (purchase_store
+                .add_parser('rewe',
+                            help=self.__doc__,
+                            description=self.create_subcommand.__doc__)
+                .add_subparsers(metavar='ACTION', required=True))
+        rewe_list = rewe.add_parser('list', help='list the purchases')
+        rewe_list.set_defaults(func=self.list_rewe_purchases)
+        rewe_import = rewe.add_parser('import',
+                                      help='import a purchase')
+        rewe_import.set_defaults(func=self.import_purchase)
+        rewe_import.add_argument('--order', type=int, default=1, metavar='N',
+                                 help='Which order to import. Defaults to 1'
+                                      ' (the latest)')
+        for subcommand in [rewe_import, rewe_list]:
+            subcommand.add_argument('file',
+                                    type=FileType('r', encoding='utf-8'),
+                                    help='Path to "Meine REWE-Shop-Daten.json"'
+                                         ' file. Downloadable from'
+                                         ' https://shop.rewe.de/mydata/privacy'
+                                         ' under "Meine Daten anfordern"')
+
+    def list_rewe_purchases(self, args: AppArgs, *_: Any) -> None:
+        ''' List purchases from REWE
+
+        List purchases from the German supermarket chain REWE
+        '''
+        print('\n'.join(ReweJsonSchema.load_from_json_file(args.file
+                                                           ).list_orders()
+                        ))
+
+    def get_purchase(self, args: AppArgs) -> list[Purchase]:
+        ''' Import from REWE '''
+        data = ReweJsonSchema.load_from_json_file(args.file)
+        return [Purchase(line_item.quantity,
+                         line_item.total_price / 100,
+                         line_item.title)
+                for line_item in data.sorted_orders()[args.order-1
+                                                      ].sub_orders[0
+                                                                   ].line_items
+                if line_item.title not in ['TimeSlot',
+                                           'Enthaltene Pfandbeträge',
+                                           'Getränke-Sperrgutaufschlag']]
+
+
+class Netto(Store):
+    'German discount supermarket chain Netto Marken-Discount'
+
+    def create_subcommand(self,
+                          purchase_store: Any
+                          ) -> None:
+        '''
+        Import a "digitaler Kassenbon" email from the German discount
+        supermarket chain Netto Marken-Discount
+        '''
+        netto = purchase_store.add_parser('netto',
+                                          help=self.__doc__,
+                                          description=self.create_subcommand
+                                          .__doc__)
+        netto.set_defaults(func=self.import_purchase)
+        netto.add_argument('file',
+                           type=FileType('r', encoding='utf-8'),
+                           help='Path to an e-mail with the "digitaler Kassenbon"')
+
+    def get_purchase(self, args: AppArgs) -> list[Purchase]:
+        ''' Import from Netto Marken-Discount
+
+        Import a "digitaler Kassenbon" email from the German discount
+        supermarket chain Netto Marken-Discount
+        '''
+        email = Parser().parse(args.file)
+        html = list(part
+                    for part in email.walk()
+                    if part.get_content_type() == 'text/html'
+                    )[0].get_payload(decode=True)
+        soup = BeautifulSoup(html, 'html5lib')
+        purchase = list(column.get_text()
+                        for row
+                        in soup.select(' '.join(7*["tbody"] + ["tr"]))
+                        if not list(row.select('td')
+                                    )[0].get_text().endswith(':')
+                        and not any(keyword in row.get_text()
+                                    for keyword in ['Filiale', 'Rabatt',
+                                                    'DeutschlandCard',
+                                                    'Punkte-Gutschein'])
+                        for column in row.select('td')
+                        if column.get_text() != ''
+                        )
+        items: list[list[str]] = []
+        for pur in purchase:
+            if pur.isspace():
+                items.append([])
+            else:
+                items[-1].append(pur)
+        return simplify(self._parse_purchase(item)
+                        for item in items if len(item) > 1)
+
+    def _parse_purchase(self, args: list[str]) -> Purchase:
+        ''' Parse a Netto store purchase '''
+        return (Purchase(1,
+                         self._from_netto_price(args[1]),
+                         normanlize_white_space(args[0]))
+                if len(args) == 2
+                else Purchase(float(args[0].split()[0]),
+                              self._from_netto_price(args[2]),
+                              normanlize_white_space(args[1])))
+
+    def _from_netto_price(self, netto_price: str) -> float:
+        ''' convert from Netto store price format to grocy's '''
+        return float(netto_price.split()[0].replace(',', '.'))
 
 
 @dataclass
@@ -611,16 +721,7 @@ def recipe_ingredients_checker(args: AppArgs,
                     for ingred in unit_convertion_unknown))
 
 
-def list_rewe_purchases(args: AppArgs, *_: Any) -> None:
-    ''' List purchases from REWE
-
-    List purchases from the German supermarket chain REWE
-    '''
-    print('\n'.join(ReweJsonSchema.load_from_json_file(args.file).list_orders()
-                    ))
-
-
-def get_argparser() -> ArgumentParser:
+def get_argparser(stores: Iterable[Store]) -> ArgumentParser:
     ''' ArgumentParser factory method '''
     parser = ArgumentParser(description='Help importing into Grocy')
     parser.add_argument('--dry-run', action='store_true',
@@ -642,39 +743,8 @@ def get_argparser() -> ArgumentParser:
     purchase_store = purchase.add_subparsers(metavar='STORE',
                                              required=True,
                                              dest='store')
-    netto = purchase_store.add_parser('netto',
-                                      help='German discount supermarket chain'
-                                           ' Netto Marken-Discount',
-                                      description='import a "digitaler'
-                                                  ' Kassenbon" email from the'
-                                                  ' German discount'
-                                                  ' supermarket chain Netto'
-                                                  ' Marken-Discount')
-    netto.set_defaults(func=import_purchase)
-    netto.add_argument('file',
-                       type=FileType('r', encoding='utf-8'),
-                       help='Path to an e-mail with the "digitaler Kassenbon"')
-    rewe = (purchase_store
-            .add_parser('rewe',
-                        help='German supermarket chain REWE',
-                        description='Import from DSGVO provided'
-                                    ' "Meine REWE-Shop-Daten.json"')
-            .add_subparsers(metavar='ACTION', required=True))
-    rewe_list = rewe.add_parser('list', help='list the purchases')
-    rewe_list.set_defaults(func=list_rewe_purchases)
-    rewe_import = rewe.add_parser('import',
-                                  help='import a purchase')
-    rewe_import.set_defaults(func=import_purchase)
-    rewe_import.add_argument('--order', type=int, default=1, metavar='N',
-                             help='Which order to import. Defaults to 1'
-                                  ' (the latest)')
-    for subcommand in [rewe_import, rewe_list]:
-        subcommand.add_argument('file',
-                                type=FileType('r', encoding='utf-8'),
-                                help='Path to "Meine REWE-Shop-Daten.json"'
-                                     ' file. Downloadable from'
-                                     ' https://shop.rewe.de/mydata/privacy'
-                                     ' under "Meine Daten anfordern"')
+    for store in stores:
+        store.create_subcommand(purchase_store)
     return parser
 
 
@@ -756,48 +826,6 @@ def convert_unit(convertions: Iterable[GrocyQUnitConvertion],
         raise
 
 
-def import_purchase(args: AppArgs,
-                    config: AppConfig,
-                    grocy: GrocyApi) -> None:
-    ''' help importing multiple purchases into grocy '''
-    stores = {'netto': netto_purchase,
-              'rewe': rewe_purchase}
-    groceries = stores[args.store](args)
-    barcodes = grocy.get_all_product_barcodes()
-    shopping_location = get_shopping_location_id(args.store, config, grocy)
-    factor = partial(convert_unit, grocy.get_all_quantity_unit_convertions())
-    while any(unknown_items := [str(item)
-                                for item in groceries
-                                if item.name not in barcodes]):
-        print('Unknown products. Please add to grocy:', file=sys.stderr)
-        print('\n'.join(unknown_items), file=sys.stderr)
-        input('...')
-        barcodes = grocy.get_all_product_barcodes()
-    products = grocy.get_all_products_by_id()
-    grocy_purchases = []
-    for item in groceries:
-        try:
-            pro = barcodes[item.name]
-            grocy_purchases.append(partial(grocy.purchase,
-                                           pro['product_id'],
-                                           item.amount
-                                           * pro['amount']
-                                           * factor(pro['qu_id'],
-                                                    products[pro['product_id']
-                                                             ]['qu_id_stock'],
-                                                    pro['product_id']),
-                                           item.price / item.amount,
-                                           shopping_location
-                                           ))
-        except Exception:
-            print(f'Failed {item}')
-            raise
-        logger.debug('Prepared %s', item)
-    for func, item in zip(grocy_purchases, groceries):
-        func()
-        print(f'Added {item}')
-
-
 def format_shopping_list_item(item: GrocyShoppingListItem,
                               known_products: dict[int, GrocyProduct],
                               units: dict[int, GrocyQuantityUnit],
@@ -831,7 +859,7 @@ def export_shopping_list(_: AppArgs,
 
 def main() -> None:
     ''' Run the CLI program '''
-    args = cast(AppArgs, get_argparser().parse_args())
+    args = cast(AppArgs, get_argparser([Netto(), Rewe()]).parse_args())
     config_path = join(user_config_dir('grocy-importer', 'adaschma.name'),
                        'config.ini')
     config_parser = ConfigParser()
