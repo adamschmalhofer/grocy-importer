@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from argparse import ArgumentParser, FileType
 import re
+from abc import (ABC, abstractmethod)
 from email.parser import Parser
 from typing import (Union, Iterable, Optional, TextIO, TypedDict, Literal,
                     Callable, cast, Any)
@@ -217,7 +218,7 @@ def normanlize_white_space(orig: str) -> str:
 
 @dataclass
 class Purchase:
-    ''' Represents a purchase
+    ''' Represents an item purchased.
 
     Unlike Grocy the price is that total rather then per unit.
     '''
@@ -257,22 +258,62 @@ def simplify(items: Iterable[Purchase]
             if float(price) >= 0]
 
 
-class Store:
-    '''
-    '''
+class Store(ABC):
+    ''' Base class for store backends. '''
+
+    @property
+    @abstractmethod
+    def store_info(self) -> StoreSubcommandInfo:
+        ''' The information to use in the subcommand for the store.
+        '''
+        ...
+
+    @abstractmethod
     def get_purchase(self, args: AppArgs) -> list[Purchase]:
+        ''' Returns a list of the Items for a given purchase
+        '''
+        ...
+
+    def list_purchases(self, _args: AppArgs, *_: Any) -> None:
+        ''' List purchases from store
+
+        List purchases from the store. Override this method if the store file
+        contains multiple purchases and not just one. In that case also
+        set `store_info.includes_history = True`.
+        '''
         ...
 
     def create_subcommand(self,
                           purchase_store: Any
                           ) -> None:
-        ...
+        'Import from DSGVO provided "Meine REWE-Shop-Daten.json"'
+        rewe = (purchase_store
+                .add_parser(self.store_info.name,
+                            help=self.__doc__,
+                            description=self.store_info.help_description)
+                .add_subparsers(metavar='ACTION', required=True))
+        rewe_import = rewe.add_parser('import',
+                                      help='import a purchase')
+        rewe_import.set_defaults(func=self.import_purchase)
+        active_subcommands = [rewe_import]
+        if self.store_info.includes_history:
+            rewe_list = rewe.add_parser('list', help='list the purchases')
+            rewe_list.set_defaults(func=self.list_purchases)
+            rewe_import.add_argument('--order', type=int, default=1,
+                                     metavar='N',
+                                     help='Which order to import. Defaults to'
+                                          ' 1 (the latest)')
+            active_subcommands.append(rewe_list)
+        for subcommand in active_subcommands:
+            subcommand.add_argument('file',
+                                    type=FileType('r', encoding='utf-8'),
+                                    help=self.store_info.file_help_msg)
 
     def import_purchase(self,
                         args: AppArgs,
                         config: AppConfig,
                         grocy: GrocyApi) -> None:
-        ''' help importing multiple purchases into grocy '''
+        ''' help importing purchases into grocy '''
         groceries = self.get_purchase(args)
         barcodes = grocy.get_all_product_barcodes()
         shopping_location = get_shopping_location_id(args.store, config, grocy)
@@ -295,8 +336,11 @@ class Store:
                                                item.amount
                                                * pro['amount']
                                                * factor(pro['qu_id'],
-                                                        products[pro['product_id']
-                                                                 ]['qu_id_stock'],
+                                                        products[pro
+                                                                 ['product_id'
+                                                                  ]
+                                                                 ]
+                                                        ['qu_id_stock'],
                                                         pro['product_id']),
                                                item.price / item.amount,
                                                shopping_location
@@ -310,45 +354,35 @@ class Store:
             print(f'Added {item}')
 
 
+@dataclass
+class StoreSubcommandInfo:
+    ''' Information needed in the subcommand. '''
+    name: str
+    help_description: str
+    file_help_msg: str
+    includes_history: bool = False
+
+
 class Rewe(Store):
     'German supermarket chain REWE'
 
-    def create_subcommand(self,
-                          purchase_store: Any
-                          ) -> None:
-        'Import from DSGVO provided "Meine REWE-Shop-Daten.json"'
-        rewe = (purchase_store
-                .add_parser('rewe',
-                            help=self.__doc__,
-                            description=self.create_subcommand.__doc__)
-                .add_subparsers(metavar='ACTION', required=True))
-        rewe_list = rewe.add_parser('list', help='list the purchases')
-        rewe_list.set_defaults(func=self.list_rewe_purchases)
-        rewe_import = rewe.add_parser('import',
-                                      help='import a purchase')
-        rewe_import.set_defaults(func=self.import_purchase)
-        rewe_import.add_argument('--order', type=int, default=1, metavar='N',
-                                 help='Which order to import. Defaults to 1'
-                                      ' (the latest)')
-        for subcommand in [rewe_import, rewe_list]:
-            subcommand.add_argument('file',
-                                    type=FileType('r', encoding='utf-8'),
-                                    help='Path to "Meine REWE-Shop-Daten.json"'
-                                         ' file. Downloadable from'
-                                         ' https://shop.rewe.de/mydata/privacy'
-                                         ' under "Meine Daten anfordern"')
+    @property
+    def store_info(self) -> StoreSubcommandInfo:
+        return StoreSubcommandInfo(
+            'rewe',
+            'Import from DSGVO provided "Meine REWE-Shop-Daten.json"',
+            '''
+            Path to "Meine REWE-Shop-Daten.json" file. Downloadable from
+            https://shop.rewe.de/mydata/privacy under "Meine Daten anfordern"
+            ''',
+            includes_history=True)
 
-    def list_rewe_purchases(self, args: AppArgs, *_: Any) -> None:
-        ''' List purchases from REWE
-
-        List purchases from the German supermarket chain REWE
-        '''
-        print('\n'.join(ReweJsonSchema.load_from_json_file(args.file
+    def list_purchases(self, _args: AppArgs, *_: Any) -> None:
+        print('\n'.join(ReweJsonSchema.load_from_json_file(_args.file
                                                            ).list_orders()
                         ))
 
     def get_purchase(self, args: AppArgs) -> list[Purchase]:
-        ''' Import from REWE '''
         data = ReweJsonSchema.load_from_json_file(args.file)
         return [Purchase(line_item.quantity,
                          line_item.total_price / 100,
@@ -364,21 +398,16 @@ class Rewe(Store):
 class Netto(Store):
     'German discount supermarket chain Netto Marken-Discount'
 
-    def create_subcommand(self,
-                          purchase_store: Any
-                          ) -> None:
-        '''
-        Import a "digitaler Kassenbon" email from the German discount
-        supermarket chain Netto Marken-Discount
-        '''
-        netto = purchase_store.add_parser('netto',
-                                          help=self.__doc__,
-                                          description=self.create_subcommand
-                                          .__doc__)
-        netto.set_defaults(func=self.import_purchase)
-        netto.add_argument('file',
-                           type=FileType('r', encoding='utf-8'),
-                           help='Path to an e-mail with the "digitaler Kassenbon"')
+    @property
+    def store_info(self) -> StoreSubcommandInfo:
+        return StoreSubcommandInfo(
+            'netto',
+            '''
+            Import a "digitaler Kassenbon" email from the German discount
+            supermarket chain Netto Marken-Discount
+            ''',
+            'Path to an e-mail with the "digitaler Kassenbon"',
+            )
 
     def get_purchase(self, args: AppArgs) -> list[Purchase]:
         ''' Import from Netto Marken-Discount
