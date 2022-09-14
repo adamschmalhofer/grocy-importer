@@ -8,7 +8,7 @@ from argparse import ArgumentParser, FileType
 import re
 from abc import (ABC, abstractmethod)
 from email.parser import Parser
-from typing import (Union, Iterable, Optional, TextIO, TypedDict, Literal,
+from typing import (Union, Iterable, Mapping, Optional, TextIO, TypedDict, Literal,
                     Callable, cast, Any)
 from dataclasses import dataclass
 from itertools import groupby
@@ -75,6 +75,13 @@ class GrocyProduct(TypedDict):
     qu_factor_purchase_to_stock: float
     qu_id_stock: int
     product_group_id: int
+    location_id: int
+
+
+class GrocyLocation(TypedDict):
+    ''' A location as returned from the Grocy API '''
+    id: int
+    name: str
 
 
 class GrocyProductGroup(TypedDict):
@@ -156,6 +163,13 @@ class GrocyApi:
                                 headers=self.headers)
         return cast(Iterable[GrocyShoppingLocation], response.json())
 
+    def get_location_names(self) -> Mapping[int, str]:
+        ''' all (storage) locations known to grocy '''
+        response = requests.get(self.base_url + '/objects/locations',
+                                headers=self.headers)
+        return {location['id']: location['name']
+                for location in cast(Iterable[GrocyLocation], response.json())}
+
     def get_all_quantity_units(self) -> Iterable[GrocyQuantityUnit]:
         ''' all quantity units known to grocy '''
         response = requests.get(self.base_url + '/objects/quantity_units',
@@ -203,6 +217,7 @@ class GrocyApi:
 @dataclass
 class AppArgs:
     ''' Structure of our CLI args '''
+    regex: str
     dry_run: bool
     store: Literal['netto', 'rewe']
     file: TextIO
@@ -750,12 +765,28 @@ def recipe_ingredients_checker(args: AppArgs,
                     for ingred in unit_convertion_unknown))
 
 
+def find_item(args: AppArgs,
+              _: AppConfig,
+              grocy: GrocyApi) -> None:
+    ''' Find default location of a product '''
+    locations = grocy.get_location_names()
+    products = [p
+                for (name, p) in grocy.get_all_products().items()
+                if re.search(args.regex, name, re.I)]
+    print('\n'.join(f'{p["name"]}: {locations[p["location_id"]]}'
+                    for p in products))
+
+
 def get_argparser(stores: Iterable[Store]) -> ArgumentParser:
     ''' ArgumentParser factory method '''
     parser = ArgumentParser(description='Help importing into Grocy')
     parser.add_argument('--dry-run', action='store_true',
                         help='perform a trial run with no changes made')
     subparsers = parser.add_subparsers()
+    whereis = subparsers.add_parser('whereis',
+                                    help='show location of a product')
+    whereis.add_argument('regex')
+    whereis.set_defaults(func=find_item)
     shoppinglist = subparsers.add_parser('shopping-list',
                                          help='export shopping list in'
                                               ' todo.txt format')
@@ -768,6 +799,7 @@ def get_argparser(stores: Iterable[Store]) -> ArgumentParser:
                                    )
     recipe.add_argument('url')
     recipe.set_defaults(func=recipe_ingredients_checker)
+
     purchase = subparsers.add_parser('purchase', help='import purchases')
     purchase_store = purchase.add_subparsers(metavar='STORE',
                                              required=True,
