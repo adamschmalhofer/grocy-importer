@@ -8,8 +8,8 @@ from argparse import ArgumentParser, FileType
 import re
 from abc import (ABC, abstractmethod)
 from email.parser import Parser
-from typing import (Union, Iterable, Mapping, Optional, TextIO, TypedDict, Literal,
-                    Callable, cast, Any)
+from typing import (Union, Iterable, Mapping, Optional, TextIO, TypedDict,
+                    Literal, Callable, cast, Any)
 from dataclasses import dataclass
 from itertools import groupby
 from configparser import ConfigParser
@@ -132,6 +132,7 @@ class GrocyApi:
         self.headers = {'GROCY-API-KEY': api_key}
         self.base_url = base_url
         self.dry_run = dry_run
+        self.only_active = {'query[]': ['active=1']}
 
     def get_all_product_barcodes(self) -> dict[str, GrocyProductBarCode]:
         ''' all product barcodes known to grocy '''
@@ -142,13 +143,15 @@ class GrocyApi:
     def get_all_products(self) -> dict[str, GrocyProduct]:
         ''' all products known to grocy '''
         response = requests.get(self.base_url + '/objects/products',
-                                headers=self.headers)
+                                headers=self.headers,
+                                params=self.only_active)
         return {p['name']: p for p in response.json()}
 
     def get_all_products_by_id(self) -> dict[int, GrocyProduct]:
         ''' all products known to grocy '''
         response = requests.get(self.base_url + '/objects/products',
-                                headers=self.headers)
+                                headers=self.headers,
+                                params=self.only_active)
         return {p['id']: p for p in response.json()}
 
     def get_all_product_groups(self) -> dict[int, GrocyProductGroup]:
