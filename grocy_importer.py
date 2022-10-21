@@ -18,6 +18,7 @@ import sys
 import json
 from functools import partial
 from logging import getLogger
+from datetime import datetime
 
 from bs4 import BeautifulSoup
 import requests
@@ -125,6 +126,12 @@ class GrocyShoppingListItem(TypedDict):
     qu_id: int
 
 
+class GrocyChore(TypedDict):
+    ''' A Chore as returned from the Grocy API '''
+    id: int
+    chore_name: str
+
+
 class GrocyApi:
     ''' Calls to the Grocy REST-API '''
 
@@ -200,6 +207,26 @@ class GrocyApi:
                                 headers=self.headers)
         return cast(Iterable[GrocyShoppingListItem], response.json())
 
+    def get_overdue_chores(self, now: datetime) -> Iterable[GrocyChore]:
+        ''' all chores that are overdue '''
+        response = requests.get(self.base_url
+                                + '/chores',
+                                headers=self.headers,
+                                params={'query[]':
+                                        ['next_estimated_execution_time<'
+                                         + now.strftime('%F %T')]})
+        return cast(Iterable[GrocyChore], response.json())
+
+    def did_chore(self, chore_id: int) -> GrocyChore:
+        ''' Mark a chore as done '''
+        if self.dry_run:
+            return GrocyChore(id=0, chore_name='dry run')
+        response = requests.post(f'{self.base_url}/chores/{chore_id}/execute',
+                                 headers=self.headers,
+                                 json={})
+        assert response.status_code//100 == 2
+        return cast(GrocyChore, response.json())
+
     def purchase(self, product_id: int, amount: float, price: float,
                  shopping_location_id: int) -> None:
         ''' Add a purchase to grocy '''
@@ -227,6 +254,7 @@ class AppArgs:
     func: Callable[[AppArgs, AppConfig, GrocyApi], None]
     order: int
     url: str
+    chore: int
 
 
 def normanlize_white_space(orig: str) -> str:
@@ -284,13 +312,11 @@ class Store(ABC):
     def store_info(self) -> StoreSubcommandInfo:
         ''' The information to use in the subcommand for the store.
         '''
-        ...
 
     @abstractmethod
     def get_purchase(self, args: AppArgs) -> list[Purchase]:
         ''' Returns a list of the Items for a given purchase
         '''
-        ...
 
     def list_purchases(self, _args: AppArgs, *_: Any) -> None:
         ''' List purchases from store
@@ -299,7 +325,6 @@ class Store(ABC):
         contains multiple purchases and not just one. In that case also
         set `store_info.includes_history = True`.
         '''
-        ...
 
     def create_subcommand(self,
                           purchase_store: Any
@@ -768,6 +793,25 @@ def recipe_ingredients_checker(args: AppArgs,
                     for ingred in unit_convertion_unknown))
 
 
+def human_agrees(question: str) -> bool:
+    ''' Ask human a yes/no question '''
+    answer = input(question + ' [y/n]')
+    return 'y' in answer
+
+
+def chore_prompt_overdue(args: AppArgs,
+                         _: AppConfig,
+                         grocy: GrocyApi) -> None:
+    ''' Prompt to do each overdue chore
+    '''
+    if args.chore is not None:
+        grocy.did_chore(args.chore)
+        return
+    for chore in grocy.get_overdue_chores(datetime.now()):
+        if human_agrees(f'Completed {chore["chore_name"]}?'):
+            grocy.did_chore(chore['id'])
+
+
 def find_item(args: AppArgs,
               _: AppConfig,
               grocy: GrocyApi) -> None:
@@ -809,6 +853,10 @@ def get_argparser(stores: Iterable[Store]) -> ArgumentParser:
                                              dest='store')
     for store in stores:
         store.create_subcommand(purchase_store)
+    chore = subparsers.add_parser('chore',
+                                  help='Prompt to do each overdue chore')
+    chore.set_defaults(func=chore_prompt_overdue)
+    chore.add_argument('chore', type=int, nargs='?')
     return parser
 
 
