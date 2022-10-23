@@ -24,6 +24,7 @@ from bs4 import BeautifulSoup
 import requests
 from marshmallow import Schema, fields, EXCLUDE, post_load
 from appdirs import user_config_dir
+import argcomplete
 
 
 logger = getLogger(__name__)
@@ -1004,7 +1005,9 @@ def export_shopping_list(_: AppArgs,
 
 def main() -> None:
     ''' Run the CLI program '''
-    args = cast(AppArgs, get_argparser([Netto(), Rewe()]).parse_args())
+    argparser = get_argparser([Netto(), Rewe()])
+    argcomplete.autocomplete(argparser)
+    args = cast(AppArgs, argparser.parse_args())
     config_path = join(user_config_dir('grocy-importer', 'adaschma.name'),
                        'config.ini')
     config_parser = ConfigParser()
