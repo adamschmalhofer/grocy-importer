@@ -857,6 +857,8 @@ def get_argparser(stores: Iterable[Store]) -> ArgumentParser:
                                   help='Prompt to do each overdue chore')
     chore.set_defaults(func=chore_prompt_overdue)
     chore.add_argument('chore', type=int, nargs='?')
+    chore.add_argument('--show', action='store_true',
+                       help='just show the chore(s)')
     return parser
 
 
