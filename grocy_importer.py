@@ -126,8 +126,24 @@ class GrocyShoppingListItem(TypedDict):
     qu_id: int
 
 
+class GrocyChoreDetailCore(TypedDict):
+    ''' The main part of the chore of a chore detail from the Grocy API '''
+    id: int
+    name: str
+
+
+class GrocyChoreDetail(TypedDict):
+    ''' A chore detail as returned from the Grocy API '''
+    chore: GrocyChoreDetailCore
+
+
+def chore_from_detail(orig: GrocyChoreDetail) -> GrocyChore:
+    ''' Convert to a GrocyChore '''
+    return {'id': orig["chore"]["id"], 'chore_name': orig["chore"]["name"]}
+
+
 class GrocyChore(TypedDict):
-    ''' A Chore as returned from the Grocy API '''
+    ''' A chore as returned from the Grocy API '''
     id: int
     chore_name: str
 
@@ -220,12 +236,20 @@ class GrocyApi:
     def did_chore(self, chore_id: int) -> GrocyChore:
         ''' Mark a chore as done '''
         if self.dry_run:
-            return GrocyChore(id=0, chore_name='dry run')
+            return self.get_chore(chore_id)
         response = requests.post(f'{self.base_url}/chores/{chore_id}/execute',
                                  headers=self.headers,
                                  json={})
         assert response.status_code//100 == 2
         return cast(GrocyChore, response.json())
+
+    def get_chore(self, chore_id: int) -> GrocyChore:
+        ''' Get a chore from grocy '''
+        respone = requests.get(self.base_url
+                               + f'/chores/{chore_id}',
+                               headers=self.headers)
+        assert respone.status_code//100 == 2
+        return chore_from_detail(cast(GrocyChoreDetail, respone.json()))
 
     def purchase(self, product_id: int, amount: float, price: float,
                  shopping_location_id: int) -> None:
@@ -255,6 +279,7 @@ class AppArgs:
     order: int
     url: str
     chore: int
+    show: bool
 
 
 def normanlize_white_space(orig: str) -> str:
@@ -805,10 +830,16 @@ def chore_prompt_overdue(args: AppArgs,
     ''' Prompt to do each overdue chore
     '''
     if args.chore is not None:
-        grocy.did_chore(args.chore)
+        if args.show:
+            chore = grocy.get_chore(args.chore)
+            print(chore["chore_name"])
+        else:
+            grocy.did_chore(args.chore)
         return
     for chore in grocy.get_overdue_chores(datetime.now()):
-        if human_agrees(f'Completed {chore["chore_name"]}?'):
+        if args.show:
+            print(f'{chore["id"]}: {chore["chore_name"]}')
+        elif human_agrees(f'Completed {chore["chore_name"]}?'):
             grocy.did_chore(chore['id'])
 
 
