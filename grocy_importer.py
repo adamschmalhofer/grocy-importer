@@ -153,7 +153,8 @@ class GrocyApi:
     ''' Calls to the Grocy REST-API '''
 
     def __init__(self, api_key: str, base_url: str, dry_run: bool):
-        self.headers = {'GROCY-API-KEY': api_key}
+        self.headers = {'GROCY-API-KEY': api_key,
+                        'Content-type': 'application/json'}
         self.base_url = base_url
         self.dry_run = dry_run
         self.only_active = {'query[]': ['active=1']}
@@ -234,13 +235,19 @@ class GrocyApi:
                                          + now.strftime('%F %T')]})
         return cast(Iterable[GrocyChore], response.json())
 
-    def did_chore(self, chore_id: int) -> GrocyChore:
+    def did_chore(self, chore_id: int, tracked_time: Optional[str]
+                  ) -> GrocyChore:
         ''' Mark a chore as done '''
         if self.dry_run:
             return self.get_chore(chore_id)
+        data = ({}
+                if tracked_time is None
+                else {'tracked_time': tracked_time,
+                      'done_by': 0, 'skipped': False})
+        logger.debug(data)
         response = requests.post(f'{self.base_url}/chores/{chore_id}/execute',
                                  headers=self.headers,
-                                 json={})
+                                 json=data)
         assert response.status_code//100 == 2
         return cast(GrocyChore, response.json())
 
@@ -281,6 +288,7 @@ class AppArgs:
     url: str
     chore: int
     show: bool
+    done_at: Optional[str]
 
 
 def normanlize_white_space(orig: str) -> str:
@@ -835,7 +843,7 @@ def chore_prompt_overdue(args: AppArgs,
             chore = grocy.get_chore(args.chore)
             print(chore["chore_name"])
         else:
-            grocy.did_chore(args.chore)
+            grocy.did_chore(args.chore, args.done_at)
         return
     for chore in grocy.get_overdue_chores(datetime.now()):
         if args.show:
@@ -889,6 +897,12 @@ def get_argparser(stores: Iterable[Store]) -> ArgumentParser:
                                   help='Prompt to do each overdue chore')
     chore.set_defaults(func=chore_prompt_overdue)
     chore.add_argument('chore', type=int, nargs='?')
+    # Once https://github.com/grocy/grocy/issues/2032
+    #   is fixed this will actually do something:
+    chore.add_argument('--done-at',
+                       metavar='y-m-dTh:mZ',
+                       help="Time the chore was done in Grocy's time format."
+                            " E.g. '2022-11-01T08:41:59.040Z',")
     chore.add_argument('--show', action='store_true',
                        help='just show the chore(s)')
     return parser
