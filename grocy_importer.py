@@ -152,62 +152,72 @@ class GrocyChore(TypedDict):
 class GrocyApi:
     ''' Calls to the Grocy REST-API '''
 
-    def __init__(self, api_key: str, base_url: str, dry_run: bool):
+    def __init__(self, api_key: str, base_url: str, dry_run: bool, timeout: int
+                 ):
         self.headers = {'GROCY-API-KEY': api_key,
                         'Content-type': 'application/json'}
         self.base_url = base_url
         self.dry_run = dry_run
         self.only_active = {'query[]': ['active=1']}
+        self.timeout = timeout
 
     def get_all_product_barcodes(self) -> dict[str, GrocyProductBarCode]:
         ''' all product barcodes known to grocy '''
         response = requests.get(self.base_url + '/objects/product_barcodes',
-                                headers=self.headers)
+                                headers=self.headers,
+                                timeout=self.timeout)
         return {p['barcode']: p for p in response.json()}
 
     def get_all_products(self) -> dict[str, GrocyProduct]:
         ''' all products known to grocy '''
         response = requests.get(self.base_url + '/objects/products',
                                 headers=self.headers,
-                                params=self.only_active)
+                                params=self.only_active,
+                                timeout=self.timeout)
         return {p['name']: p for p in response.json()}
 
     def get_all_products_by_id(self) -> dict[int, GrocyProduct]:
         ''' all products known to grocy '''
         response = requests.get(self.base_url + '/objects/products',
                                 headers=self.headers,
-                                params=self.only_active)
+                                params=self.only_active,
+                                timeout=self.timeout)
         return {p['id']: p for p in response.json()}
 
     def get_all_product_groups(self) -> dict[int, GrocyProductGroup]:
         ''' all product groups known to grocy '''
         response = requests.get(self.base_url + '/objects/product_groups',
-                                headers=self.headers)
+                                headers=self.headers,
+                                timeout=self.timeout)
         return {p['id']: p for p in response.json()}
 
     def get_all_shopping_locations(self) -> Iterable[GrocyShoppingLocation]:
         ''' all shopping locations known to grocy '''
         response = requests.get(self.base_url + '/objects/shopping_locations',
-                                headers=self.headers)
+                                headers=self.headers,
+                                timeout=self.timeout)
         return cast(Iterable[GrocyShoppingLocation], response.json())
 
     def get_location_names(self) -> Mapping[int, str]:
         ''' all (storage) locations known to grocy '''
         response = requests.get(self.base_url + '/objects/locations',
-                                headers=self.headers)
+                                headers=self.headers,
+                                timeout=self.timeout)
         return {location['id']: location['name']
                 for location in cast(Iterable[GrocyLocation], response.json())}
 
     def get_all_quantity_units(self) -> Iterable[GrocyQuantityUnit]:
         ''' all quantity units known to grocy '''
         response = requests.get(self.base_url + '/objects/quantity_units',
-                                headers=self.headers)
+                                headers=self.headers,
+                                timeout=self.timeout)
         return cast(Iterable[GrocyQuantityUnit], response.json())
 
     def get_all_quantity_units_by_id(self) -> dict[int, GrocyQuantityUnit]:
         ''' all quantity units known to grocy '''
         response = requests.get(self.base_url + '/objects/quantity_units',
-                                headers=self.headers)
+                                headers=self.headers,
+                                timeout=self.timeout)
         return {p['id']: p for p in response.json()}
 
     def get_all_quantity_unit_convertions(self
@@ -215,14 +225,16 @@ class GrocyApi:
         ''' all quantity unit convertions known to grocy '''
         response = requests.get(self.base_url
                                 + '/objects/quantity_unit_conversions',
-                                headers=self.headers)
+                                headers=self.headers,
+                                timeout=self.timeout)
         return cast(Iterable[GrocyQUnitConvertion], response.json())
 
     def get_all_shopping_list(self) -> Iterable[GrocyShoppingListItem]:
         ''' all items on shopping lists '''
         response = requests.get(self.base_url
                                 + '/objects/shopping_list',
-                                headers=self.headers)
+                                headers=self.headers,
+                                timeout=self.timeout)
         return cast(Iterable[GrocyShoppingListItem], response.json())
 
     def get_overdue_chores(self, now: datetime) -> Iterable[GrocyChore]:
@@ -232,7 +244,8 @@ class GrocyApi:
                                 headers=self.headers,
                                 params={'query[]':
                                         ['next_estimated_execution_time<'
-                                         + now.strftime('%F %T')]})
+                                         + now.strftime('%F %T')]},
+                                timeout=self.timeout)
         return cast(Iterable[GrocyChore], response.json())
 
     def did_chore(self, chore_id: int, tracked_time: Optional[str]
@@ -247,7 +260,8 @@ class GrocyApi:
         logger.debug(data)
         response = requests.post(f'{self.base_url}/chores/{chore_id}/execute',
                                  headers=self.headers,
-                                 json=data)
+                                 json=data,
+                                 timeout=self.timeout)
         assert response.status_code//100 == 2
         return cast(GrocyChore, response.json())
 
@@ -255,7 +269,8 @@ class GrocyApi:
         ''' Get a chore from grocy '''
         respone = requests.get(self.base_url
                                + f'/chores/{chore_id}',
-                               headers=self.headers)
+                               headers=self.headers,
+                               timeout=self.timeout)
         assert respone.status_code//100 == 2
         return chore_from_detail(cast(GrocyChoreDetail, respone.json()))
 
@@ -272,13 +287,15 @@ class GrocyApi:
                                        'transaction_type': 'purchase',
                                        'shopping_location_id':
                                        shopping_location_id
-                                       })
+                                       },
+                                 timeout=self.timeout)
         assert response.status_code//100 == 2
 
 
 @dataclass
 class AppArgs:
     ''' Structure of our CLI args '''
+    timeout: int
     regex: str
     dry_run: bool
     store: Literal['netto', 'rewe']
@@ -773,7 +790,7 @@ def recipe_ingredients_checker(args: AppArgs,
     Check if ingredients and their units are known to grocy for a recipe to be
     imported
     '''
-    response = requests.get(args.url)
+    response = requests.get(args.url, timeout=args.timeout)
     soup = BeautifulSoup(response.text, 'html5lib')
     ingredients = [Ingredient.parse(normanlize_white_space(item.get_text()))
                    for item in soup.select('core-list-section ul li')]
@@ -867,6 +884,8 @@ def find_item(args: AppArgs,
 def get_argparser(stores: Iterable[Store]) -> ArgumentParser:
     ''' ArgumentParser factory method '''
     parser = ArgumentParser(description='Help importing into Grocy')
+    parser.add_argument('--timeout', metavar='N', default=10, type=int,
+                        help='Override the default timeout for each REST call')
     parser.add_argument('--dry-run', action='store_true',
                         help='perform a trial run with no changes made')
     subparsers = parser.add_subparsers()
@@ -1028,7 +1047,8 @@ def main() -> None:
     config_parser.read(config_path)
     config = cast(AppConfig, config_parser)
     try:
-        grocy = GrocyApi(**config['grocy'], dry_run=args.dry_run)
+        grocy = GrocyApi(**config['grocy'], dry_run=args.dry_run,
+                         timeout=args.timeout)
     except KeyError as ex:
         raise UserError(f"Configfile '{config_path}'"
                         " is missing or incomplete."
