@@ -916,12 +916,10 @@ def get_argparser(stores: Iterable[Store]) -> ArgumentParser:
                                   help='Prompt to do each overdue chore')
     chore.set_defaults(func=chore_prompt_overdue)
     chore.add_argument('chore', type=int, nargs='?')
-    # Once https://github.com/grocy/grocy/issues/2032
-    #   is fixed this will actually do something:
     chore.add_argument('--done-at',
-                       metavar='y-m-dTh:mZ',
+                       metavar='y-m-d h:m:s',
                        help="Time the chore was done in Grocy's time format."
-                            " E.g. '2022-11-01T08:41:59.040Z',")
+                            " E.g. '2022-11-01 08:41:00',")
     chore.add_argument('--show', action='store_true',
                        help='just show the chore(s)')
     return parser
