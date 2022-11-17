@@ -782,6 +782,17 @@ class Ingredient:
                           match.group(0))
 
 
+def cookidoo_ingredients(url: str, timeout: int
+                         ) -> list[Union[Ingredient, UnparseableIngredient]]:
+    ''' Find all ingrediant of the recipe '''
+    response = requests.get(url, timeout=timeout)
+    soup = BeautifulSoup(response.text, 'html5lib')
+    ingredients = [Ingredient.parse(normanlize_white_space(item.get_text())
+                                    )
+                   for item in soup.select('core-list-section ul li')]
+    return ingredients
+
+
 def recipe_ingredients_checker(args: AppArgs,
                                _: AppConfig,
                                grocy: GrocyApi) -> None:
@@ -790,10 +801,7 @@ def recipe_ingredients_checker(args: AppArgs,
     Check if ingredients and their units are known to grocy for a recipe to be
     imported
     '''
-    response = requests.get(args.url, timeout=args.timeout)
-    soup = BeautifulSoup(response.text, 'html5lib')
-    ingredients = [Ingredient.parse(normanlize_white_space(item.get_text()))
-                   for item in soup.select('core-list-section ul li')]
+    ingredients = cookidoo_ingredients(args.url, args.timeout)
     logger.info("Found %s ingredients", len(ingredients))
     products = grocy.get_all_products()
     units = grocy.get_all_quantity_units()
