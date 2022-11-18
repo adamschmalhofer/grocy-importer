@@ -176,6 +176,11 @@ class GrocyApi:
                                 timeout=self.timeout)
         return {p['name']: p for p in response.json()}
 
+    def rearrange_by_id(self, by_name: dict[str, GrocyProduct]
+                        ) -> dict[int, GrocyProduct]:
+        ''' convinience to rearrange given known products by id '''
+        return {p['id']: p for p in by_name.values()}
+
     def get_all_products_by_id(self) -> dict[int, GrocyProduct]:
         ''' all products known to grocy '''
         response = requests.get(self.base_url + '/objects/products',
@@ -726,6 +731,15 @@ class Ingredient:
     name: str
     full: str
 
+    def apply_alias(self, alias: GrocyProductBarCode, product: GrocyProduct,
+                    units: Iterable[GrocyQuantityUnit]
+                    ) -> Ingredient:
+        ''' Return an Ingredient with cononical name '''
+        unit = (self.unit
+                if self.unit != ''
+                else {u['id']: u['name'] for u in units}[alias['qu_id']])
+        return Ingredient(self.amount, unit, product['name'], self.full)
+
     @staticmethod
     def parse(text: str) -> Union[Ingredient, UnparseableIngredient]:
         '''
@@ -804,15 +818,25 @@ def recipe_ingredients_checker(args: AppArgs,
     ingredients = cookidoo_ingredients(args.url, args.timeout)
     logger.info("Found %s ingredients", len(ingredients))
     products = grocy.get_all_products()
+    products_by_id = grocy.rearrange_by_id(products)
     units = grocy.get_all_quantity_units()
     convertions = grocy.get_all_quantity_unit_convertions()
+    barcodes = grocy.get_all_product_barcodes()
     product_known = []
-    product_unknown = []
+    product_unknown: list[Union[Ingredient, UnparseableIngredient]] = []
     for ingred in ingredients:
-        if (isinstance(ingred, UnparseableIngredient)
-                or ingred.name not in products
-                and ingred.name != ''):
+        if isinstance(ingred, UnparseableIngredient):
             product_unknown.append(ingred)
+        elif ingred.name not in products and ingred.name != '':
+            try:
+                alias = barcodes[ingred.name]
+            except KeyError:
+                product_unknown.append(ingred)
+            else:
+                product_known.append(ingred.apply_alias(
+                    alias,
+                    products_by_id[alias['product_id']],
+                    units))
         else:
             product_known.append(ingred)
     matching_units = [(ingred, [unit
