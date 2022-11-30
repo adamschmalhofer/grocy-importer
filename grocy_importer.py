@@ -1030,9 +1030,8 @@ def convert_unit(convertions: Iterable[GrocyQUnitConvertion],
                       key=lambda o: o['product_id'] is None
                       )[0]['factor']
     except IndexError:
-        print(f'No convertion found for {from_qu_id} to {to_qu_id} for'
-              f' {product_id}', file=sys.stderr)
-        raise
+        sys.exit(f'No convertion found for {from_qu_id} to {to_qu_id} for'
+                 f' {product_id}')
 
 
 def format_shopping_list_item(item: GrocyShoppingListItem,
