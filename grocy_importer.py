@@ -731,21 +731,6 @@ class Ingredient:
     name: str
     full: str
 
-    def apply_alias(self,
-                    barcodes: dict[str, GrocyProductBarCode],
-                    products_by_id: dict[int, GrocyProduct],
-                    units: Iterable[GrocyQuantityUnit]
-                    ) -> Ingredient:
-        ''' Return an Ingredient with cononical name '''
-        alias = barcodes[self.name]
-        unit = (self.unit
-                if self.unit != ''
-                else {u['id']: u['name'] for u in units}[alias['qu_id']])
-        return Ingredient(self.amount,
-                          unit,
-                          products_by_id[alias['product_id']]['name'],
-                          self.full)
-
     @staticmethod
     def parse(text: str) -> Union[Ingredient, UnparseableIngredient]:
         '''
@@ -813,6 +798,27 @@ def cookidoo_ingredients(url: str, timeout: int
     return ingredients
 
 
+@dataclass
+class IngredientNormalizer:
+    ''' WIP
+    '''
+    barcodes: dict[str, GrocyProductBarCode]
+    products_by_id: dict[int, GrocyProduct]
+    units: Iterable[GrocyQuantityUnit]
+
+    def apply_alias(self, ingredient: Ingredient,
+                    ) -> Ingredient:
+        ''' Return an Ingredient with cononical name '''
+        alias = self.barcodes[ingredient.name]
+        unit = (ingredient.unit
+                if ingredient.unit != ''
+                else {u['id']: u['name'] for u in self.units}[alias['qu_id']])
+        return Ingredient(ingredient.amount,
+                          unit,
+                          self.products_by_id[alias['product_id']]['name'],
+                          ingredient.full)
+
+
 def recipe_ingredients_checker(args: AppArgs,
                                _: AppConfig,
                                grocy: GrocyApi) -> None:
@@ -830,15 +836,13 @@ def recipe_ingredients_checker(args: AppArgs,
     barcodes = grocy.get_all_product_barcodes()
     product_known = []
     product_unknown: list[Union[Ingredient, UnparseableIngredient]] = []
+    normalizer = IngredientNormalizer(barcodes, products_by_id, units)
     for ingred in ingredients:
         if isinstance(ingred, UnparseableIngredient):
             product_unknown.append(ingred)
         elif ingred.name not in products and ingred.name != '':
             try:
-                product_known.append(ingred.apply_alias(
-                    barcodes,
-                    products_by_id,
-                    units))
+                product_known.append(normalizer.apply_alias(ingred))
             except KeyError:
                 product_unknown.append(ingred)
         else:
