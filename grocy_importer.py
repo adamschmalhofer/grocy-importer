@@ -731,14 +731,20 @@ class Ingredient:
     name: str
     full: str
 
-    def apply_alias(self, alias: GrocyProductBarCode, product: GrocyProduct,
+    def apply_alias(self,
+                    barcodes: dict[str, GrocyProductBarCode],
+                    products_by_id: dict[int, GrocyProduct],
                     units: Iterable[GrocyQuantityUnit]
                     ) -> Ingredient:
         ''' Return an Ingredient with cononical name '''
+        alias = barcodes[self.name]
         unit = (self.unit
                 if self.unit != ''
                 else {u['id']: u['name'] for u in units}[alias['qu_id']])
-        return Ingredient(self.amount, unit, product['name'], self.full)
+        return Ingredient(self.amount,
+                          unit,
+                          products_by_id[alias['product_id']]['name'],
+                          self.full)
 
     @staticmethod
     def parse(text: str) -> Union[Ingredient, UnparseableIngredient]:
@@ -829,14 +835,12 @@ def recipe_ingredients_checker(args: AppArgs,
             product_unknown.append(ingred)
         elif ingred.name not in products and ingred.name != '':
             try:
-                alias = barcodes[ingred.name]
+                product_known.append(ingred.apply_alias(
+                    barcodes,
+                    products_by_id,
+                    units))
             except KeyError:
                 product_unknown.append(ingred)
-            else:
-                product_known.append(ingred.apply_alias(
-                    alias,
-                    products_by_id[alias['product_id']],
-                    units))
         else:
             product_known.append(ingred)
     matching_units = [(ingred, [unit
