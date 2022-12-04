@@ -799,12 +799,34 @@ def cookidoo_ingredients(url: str, timeout: int
 
 
 @dataclass
+class NormalizedIngredientsResult:
+    ''' Categorized Ingredients  '''
+    product_unknown: list[UnparseableIngredient | Ingredient]
+    matching_units: list[tuple[Ingredient, list[GrocyQuantityUnit]]]
+    unit_convertion_unknown: list[Ingredient]
+
+    def print(self) -> None:
+        ''' WIP '''
+        print('Unknown ingredients:')
+        print('\n'.join(str(ingred) for ingred in self.product_unknown))
+        print('\nUnknown units:')
+        print('\n'.join(str(ingred)
+                        for ingred, units in self.matching_units
+                        if not any(units)))
+        print('\nUnknown unit convertion:')
+        print('\n'.join(str(ingred)
+                        for ingred in self.unit_convertion_unknown))
+
+
+@dataclass
 class IngredientNormalizer:
     ''' WIP
     '''
     barcodes: dict[str, GrocyProductBarCode]
+    products: dict[str, GrocyProduct]
     products_by_id: dict[int, GrocyProduct]
     units: Iterable[GrocyQuantityUnit]
+    convertions: Iterable[GrocyQUnitConvertion]
 
     def apply_alias(self, ingredient: Ingredient,
                     ) -> Ingredient:
@@ -817,6 +839,50 @@ class IngredientNormalizer:
                           unit,
                           self.products_by_id[alias['product_id']]['name'],
                           ingredient.full)
+
+    def match_with_grocy(self,
+                         ingredients: list[Union[Ingredient,
+                                                 UnparseableIngredient]]
+                         ) -> NormalizedIngredientsResult:
+        ''' WIP '''
+        product_known = []
+        product_unknown: list[Union[Ingredient, UnparseableIngredient]] = []
+        for ingred in ingredients:
+            if isinstance(ingred, UnparseableIngredient):
+                product_unknown.append(ingred)
+            elif ingred.name not in self.products and ingred.name != '':
+                try:
+                    product_known.append(self.apply_alias(ingred))
+                except KeyError:
+                    product_unknown.append(ingred)
+            else:
+                product_known.append(ingred)
+        matching_units = [(ingred, [unit
+                                    for unit in self.units
+                                    if ingred.unit in [unit['name'],
+                                                       unit['name_plural']]
+                                    ])
+                          for ingred in product_known]
+        convertion_unknown = [ingred
+                              for ingred, units in matching_units
+                              if any(units)
+                              and not any(self.products[ingred.name
+                                                        ]['qu_id_stock']
+                                          == u['id']
+                                          for u in units)
+                              and not any(u['id'] == c['from_qu_id']
+                                          and c['to_qu_id']
+                                          == self.products[ingred.name
+                                                           ]['qu_id_stock']
+                                          and c['product_id'
+                                                ] in [self.products[ingred.name
+                                                                    ]['id'],
+                                                      None]
+                                          for u in units
+                                          for c in self.convertions)]
+        return NormalizedIngredientsResult(product_unknown,
+                                           matching_units,
+                                           convertion_unknown)
 
 
 def recipe_ingredients_checker(args: AppArgs,
@@ -834,54 +900,15 @@ def recipe_ingredients_checker(args: AppArgs,
     units = grocy.get_all_quantity_units()
     convertions = grocy.get_all_quantity_unit_convertions()
     barcodes = grocy.get_all_product_barcodes()
-    product_known = []
-    product_unknown: list[Union[Ingredient, UnparseableIngredient]] = []
-    normalizer = IngredientNormalizer(barcodes, products_by_id, units)
-    for ingred in ingredients:
-        if isinstance(ingred, UnparseableIngredient):
-            product_unknown.append(ingred)
-        elif ingred.name not in products and ingred.name != '':
-            try:
-                product_known.append(normalizer.apply_alias(ingred))
-            except KeyError:
-                product_unknown.append(ingred)
-        else:
-            product_known.append(ingred)
-    matching_units = [(ingred, [unit
-                                for unit in units
-                                if ingred.unit in [unit['name'],
-                                                   unit['name_plural']]
-                                ])
-                      for ingred in product_known]
-    unit_convertion_unknown = [ingred
-                               for ingred, units in matching_units
-                               if any(units)
-                               and not any(u['id'] == products[ingred.name
-                                                               ]['qu_id_stock']
-                                           for u in units)
-                               and not any(u['id'] == c['from_qu_id']
-                                           and c['to_qu_id']
-                                           == products[ingred.name
-                                                       ]['qu_id_stock']
-                                           and c['product_id'
-                                                 ] in [products[ingred.name
-                                                                ]['id'],
-                                                       None]
-                                           for u in units
-                                           for c in convertions)]
+    normalizer = IngredientNormalizer(barcodes,
+                                      products,
+                                      products_by_id,
+                                      units,
+                                      convertions)
+    normalizer.match_with_grocy(ingredients).print()
     # from_qu_id: int
     # to_qu_id: int
     # product_id: Optional[int]
-
-    print('Unknown ingredients:')
-    print('\n'.join(str(ingred) for ingred in product_unknown))
-    print('\nUnknown units:')
-    print('\n'.join(str(ingred)
-                    for ingred, units in matching_units
-                    if not any(units)))
-    print('\nUnknown unit convertion:')
-    print('\n'.join(str(ingred)
-                    for ingred in unit_convertion_unknown))
 
 
 def human_agrees(question: str) -> bool:
