@@ -806,7 +806,7 @@ class NormalizedIngredientsResult:
     unit_convertion_unknown: list[Ingredient]
 
     def print(self) -> None:
-        ''' WIP '''
+        ''' Output a human readable summary '''
         print('Unknown ingredients:')
         print('\n'.join(str(ingred) for ingred in self.product_unknown))
         print('\nUnknown units:')
