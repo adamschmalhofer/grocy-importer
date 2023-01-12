@@ -933,7 +933,7 @@ def chore_prompt_overdue(args: AppArgs,
         if args.show:
             print(f'{chore["id"]}: {chore["chore_name"]}')
         elif human_agrees(f'Completed {chore["chore_name"]}?'):
-            grocy.did_chore(chore['id'])
+            grocy.did_chore(chore['id'], args.done_at)
 
 
 def find_item(args: AppArgs,
