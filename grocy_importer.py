@@ -253,6 +253,15 @@ class GrocyApi:
                                 timeout=self.timeout)
         return cast(Iterable[GrocyChore], response.json())
 
+    def schedule_chore(self, chore_id: int, date_time: str
+                       ) -> GrocyChore:
+        if self.dry_run:
+            return self.get_chore(chore_id)
+        data = {'rescheduled_date': date_time}
+        response = requests.put(f'{self.base_url}/objects/chores/{chore_id}',
+                                data)
+        return cast(GrocyChore, response.json())
+
     def did_chore(self, chore_id: int, tracked_time: Optional[str]
                   ) -> GrocyChore:
         ''' Mark a chore as done '''
@@ -310,7 +319,7 @@ class AppArgs:
     url: str
     chore: int
     show: bool
-    done_at: Optional[str]
+    at: Optional[str]
 
 
 def normanlize_white_space(orig: str) -> str:
@@ -917,22 +926,31 @@ def human_agrees(question: str) -> bool:
     return 'y' in answer
 
 
-def chore_did(args: AppArgs,
-              _: AppConfig,
-              grocy: GrocyApi) -> None:
+def chore_did_cmd(args: AppArgs,
+                  _: AppConfig,
+                  grocy: GrocyApi) -> None:
     ''' Mark chore(s) as done.
     '''
     if args.chore is not None:
-        grocy.did_chore(args.chore, args.done_at)
+        grocy.did_chore(args.chore, args.at)
         return
     for chore in grocy.get_overdue_chores(datetime.now()):
         if human_agrees(f'Completed {chore["chore_name"]}?'):
-            grocy.did_chore(chore['id'], args.done_at)
+            grocy.did_chore(chore['id'], args.at)
 
 
-def chore_show(args: AppArgs,
-               _: AppConfig,
-               grocy: GrocyApi) -> None:
+def chore_schedule_cmd(args: AppArgs,
+                       _: AppConfig,
+                       grocy: GrocyApi) -> None:
+    ''' Schedule chore(s).
+    '''
+    at = args.at or datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    grocy.schedule_chore(args.chore, at)
+
+
+def chore_show_cmd(args: AppArgs,
+                   _: AppConfig,
+                   grocy: GrocyApi) -> None:
     ''' Show chore(s).
     '''
     if args.chore is not None:
@@ -991,15 +1009,23 @@ def get_argparser(stores: Iterable[Store]) -> ArgumentParser:
                                   ).add_subparsers()
     chore_did = chore.add_parser('did',
                                  help='Mark chore as done')
-    chore_did.set_defaults(func=chore_did)
+    chore_did.set_defaults(func=chore_did_cmd)
     chore_did.add_argument('chore', type=int, nargs='?')
     chore_did.add_argument('--at',
                            metavar='y-m-d h:m:s',
                            help="Time the chore was done in Grocy's time"
                                 " format. E.g. '2022-11-01 08:41:00',")
+    chore_schedule = chore.add_parser('schedule',
+                                      help='Schedule a chore')
+    chore_schedule.set_defaults(func=chore_schedule_cmd)
+    chore_schedule.add_argument('chore', type=int, nargs=1)
+    chore_schedule.add_argument('--at',
+                                metavar='y-m-d h:m:s',
+                                help="The scheduled time in Grocy's time"
+                                     " format. E.g. '2022-11-01 08:41:00',")
     chore_show = chore.add_parser('show',
                                   help='Show given chore')
-    chore_show.set_defaults(func=chore_show)
+    chore_show.set_defaults(func=chore_show_cmd)
     chore_show.add_argument('chore', type=int, nargs='?')
     return parser
 
