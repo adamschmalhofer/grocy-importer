@@ -917,23 +917,30 @@ def human_agrees(question: str) -> bool:
     return 'y' in answer
 
 
-def chore_prompt_overdue(args: AppArgs,
-                         _: AppConfig,
-                         grocy: GrocyApi) -> None:
-    ''' Prompt to do each overdue chore
+def chore_did(args: AppArgs,
+              _: AppConfig,
+              grocy: GrocyApi) -> None:
+    ''' Mark chore(s) as done.
     '''
     if args.chore is not None:
-        if args.show:
-            chore = grocy.get_chore(args.chore)
-            print(chore["chore_name"])
-        else:
-            grocy.did_chore(args.chore, args.done_at)
+        grocy.did_chore(args.chore, args.done_at)
         return
     for chore in grocy.get_overdue_chores(datetime.now()):
-        if args.show:
-            print(f'{chore["id"]}: {chore["chore_name"]}')
-        elif human_agrees(f'Completed {chore["chore_name"]}?'):
+        if human_agrees(f'Completed {chore["chore_name"]}?'):
             grocy.did_chore(chore['id'], args.done_at)
+
+
+def chore_show(args: AppArgs,
+               _: AppConfig,
+               grocy: GrocyApi) -> None:
+    ''' Show chore(s).
+    '''
+    if args.chore is not None:
+        chore = grocy.get_chore(args.chore)
+        print(chore["chore_name"])
+        return
+    for chore in grocy.get_overdue_chores(datetime.now()):
+        print(f'{chore["id"]}: {chore["chore_name"]}')
 
 
 def find_item(args: AppArgs,
@@ -980,15 +987,20 @@ def get_argparser(stores: Iterable[Store]) -> ArgumentParser:
     for store in stores:
         store.create_subcommand(purchase_store)
     chore = subparsers.add_parser('chore',
-                                  help='Prompt to do each overdue chore')
-    chore.set_defaults(func=chore_prompt_overdue)
-    chore.add_argument('chore', type=int, nargs='?')
-    chore.add_argument('--done-at',
-                       metavar='y-m-d h:m:s',
-                       help="Time the chore was done in Grocy's time format."
-                            " E.g. '2022-11-01 08:41:00',")
-    chore.add_argument('--show', action='store_true',
-                       help='just show the chore(s)')
+                                  help='Prompt to do each overdue chore'
+                                  ).add_subparsers()
+    chore_did = chore.add_parser('did',
+                                 help='Mark chore as done')
+    chore_did.set_defaults(func=chore_did)
+    chore_did.add_argument('chore', type=int, nargs='?')
+    chore_did.add_argument('--at',
+                           metavar='y-m-d h:m:s',
+                           help="Time the chore was done in Grocy's time"
+                                " format. E.g. '2022-11-01 08:41:00',")
+    chore_show = chore.add_parser('show',
+                                  help='Show given chore')
+    chore_show.set_defaults(func=chore_show)
+    chore_show.add_argument('chore', type=int, nargs='?')
     return parser
 
 
