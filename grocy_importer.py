@@ -18,7 +18,7 @@ import sys
 import json
 from functools import partial
 from logging import getLogger
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from bs4 import BeautifulSoup
 import requests
@@ -319,6 +319,7 @@ class AppArgs:
     url: str
     chore: int
     show: bool
+    days: int
     at: Optional[str]
 
 
@@ -944,7 +945,8 @@ def chore_schedule_cmd(args: AppArgs,
                        grocy: GrocyApi) -> None:
     ''' Schedule chore(s).
     '''
-    at = args.at or datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    at = args.at or (datetime.now() + timedelta(days=args.days)
+                     ).strftime('%Y-%m-%d %H:%M:%S')
     grocy.schedule_chore(args.chore, at)
 
 
@@ -1023,6 +1025,7 @@ def get_argparser(stores: Iterable[Store]) -> ArgumentParser:
                                 metavar='y-m-d h:m:s',
                                 help="The scheduled time in Grocy's time"
                                      " format. E.g. '2022-11-01 08:41:00',")
+    chore_schedule.add_argument('--days', type=int, default=0)
     chore_show = chore.add_parser('show',
                                   help='Show given chore')
     chore_show.set_defaults(func=chore_show_cmd)
