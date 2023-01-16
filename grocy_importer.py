@@ -9,7 +9,7 @@ import re
 from abc import (ABC, abstractmethod)
 from email.parser import Parser
 from typing import (Union, Iterable, Mapping, Optional, TextIO, TypedDict,
-                    Literal, Callable, cast, Any)
+                    Literal, Callable, cast, Any, NotRequired)
 from dataclasses import dataclass
 from itertools import groupby
 from configparser import ConfigParser
@@ -147,6 +147,7 @@ class GrocyChore(TypedDict):
     ''' A chore as returned from the Grocy API '''
     id: int
     chore_name: str
+    rescheduled_date: NotRequired[Optional[str]]
 
 
 class GrocyApi:
@@ -321,6 +322,7 @@ class AppArgs:
     show: bool
     days: int
     at: Optional[str]
+    keep: Literal['later', 'earlier', 'old', 'new']
 
 
 def normanlize_white_space(orig: str) -> str:
@@ -947,6 +949,18 @@ def chore_schedule_cmd(args: AppArgs,
     '''
     at = args.at or (datetime.now() + timedelta(days=args.days)
                      ).strftime('%Y-%m-%d %H:%M:%S')
+    try:
+        prev_schedule = grocy.get_chore(args.chore)['rescheduled_date']
+    except KeyError:
+        pass
+    else:
+        if prev_schedule is not None and (args.keep == 'old'
+                                          or prev_schedule < at and
+                                          args.keep == 'earlier'
+                                          or prev_schedule > at and
+                                          args.keep == 'later'
+                                          ):
+            at = prev_schedule
     grocy.schedule_chore(args.chore, at)
 
 
@@ -1025,6 +1039,9 @@ def get_argparser(stores: Iterable[Store]) -> ArgumentParser:
                                 metavar='y-m-d h:m:s',
                                 help="The scheduled time in Grocy's time"
                                      " format. E.g. '2022-11-01 08:41:00',")
+    chore_schedule.add_argument('--keep',
+                                choices=['later', 'earlier', 'old', 'new'],
+                                default='new')
     chore_schedule.add_argument('--days', type=int, default=0)
     chore_show = chore.add_parser('show',
                                   help='Show given chore')
