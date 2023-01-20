@@ -144,9 +144,16 @@ def chore_from_detail(orig: GrocyChoreDetail) -> GrocyChore:
 
 
 class GrocyChore(TypedDict):
-    ''' A chore as returned from the Grocy API '''
+    ''' A chore as returned from the Grocy API via /chore '''
     id: int
     chore_name: str
+    rescheduled_date: NotRequired[Optional[str]]
+
+
+class GrocyChoreFull(TypedDict):
+    ''' A chore as returned from Grocy API via /object '''
+    id: int
+    name: str
     rescheduled_date: NotRequired[Optional[str]]
 
 
@@ -253,6 +260,20 @@ class GrocyApi:
                                          + now.strftime('%F %T')]},
                                 timeout=self.timeout)
         return cast(Iterable[GrocyChore], response.json())
+
+    def get_scheduled_manual_chores(self, now: datetime
+                                    ) -> Iterable[GrocyChoreFull]:
+        ''' all manual chores that are scheduled '''
+        response = requests.get(f'{self.base_url}/objects/chores',
+                                headers=self.headers,
+                                params={'query[]':
+                                        ['period_type=manually',
+                                         'active=1',
+                                         'rescheduled_date>'
+                                         + now.strftime('%F %T')
+                                         ]},
+                                timeout=self.timeout)
+        return cast(Iterable[GrocyChoreFull], response.json())
 
     def schedule_chore(self, chore_id: int, date_time: str
                        ) -> None:
@@ -941,8 +962,12 @@ def chore_did_cmd(args: AppArgs,
     if args.chore is not None:
         grocy.did_chore(args.chore, args.at, args.skip)
         return
-    for chore in grocy.get_overdue_chores(datetime.now()):
+    now = datetime.now()
+    for chore in grocy.get_overdue_chores(now):
         if human_agrees(f'Completed {chore["chore_name"]}?'):
+            grocy.did_chore(chore['id'], args.at, args.skip)
+    for chore in grocy.get_scheduled_manual_chores(now):
+        if human_agrees(f'Completed {chore["name"]}?'):
             grocy.did_chore(chore['id'], args.at, args.skip)
 
 
@@ -977,8 +1002,11 @@ def chore_show_cmd(args: AppArgs,
         chore = grocy.get_chore(args.chore)
         print(chore["chore_name"])
         return
-    for chore in grocy.get_overdue_chores(datetime.now()):
+    now = datetime.now()
+    for chore in grocy.get_overdue_chores(now):
         print(f'{chore["id"]}: {chore["chore_name"]}')
+    for chore in grocy.get_scheduled_manual_chores(now):
+        print(f'{chore["id"]}: {chore["name"]} ({chore["rescheduled_date"]})')
 
 
 def find_item(args: AppArgs,
