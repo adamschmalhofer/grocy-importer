@@ -255,13 +255,15 @@ class GrocyApi:
         return cast(Iterable[GrocyChore], response.json())
 
     def schedule_chore(self, chore_id: int, date_time: str
-                       ) -> GrocyChore:
+                       ) -> None:
         if self.dry_run:
-            return self.get_chore(chore_id)
+            return
         data = {'rescheduled_date': date_time}
         response = requests.put(f'{self.base_url}/objects/chores/{chore_id}',
-                                data)
-        return cast(GrocyChore, response.json())
+                                headers=self.headers,
+                                json=data,
+                                timeout=self.timeout)
+        assert response.status_code//100 == 2, response.reason
 
     def did_chore(self, chore_id: int, tracked_time: Optional[str]
                   ) -> GrocyChore:
@@ -277,17 +279,17 @@ class GrocyApi:
                                  headers=self.headers,
                                  json=data,
                                  timeout=self.timeout)
-        assert response.status_code//100 == 2
+        assert response.status_code//100 == 2, response.reason
         return cast(GrocyChore, response.json())
 
     def get_chore(self, chore_id: int) -> GrocyChore:
         ''' Get a chore from grocy '''
-        respone = requests.get(self.base_url
-                               + f'/chores/{chore_id}',
-                               headers=self.headers,
-                               timeout=self.timeout)
-        assert respone.status_code//100 == 2
-        return chore_from_detail(cast(GrocyChoreDetail, respone.json()))
+        url = f'{self.base_url}/chores/{chore_id}'
+        response = requests.get(url,
+                                headers=self.headers,
+                                timeout=self.timeout)
+        assert response.status_code//100 == 2, f'{url} {response.reason}'
+        return chore_from_detail(cast(GrocyChoreDetail, response.json()))
 
     def purchase(self, product_id: int, amount: float, price: float,
                  shopping_location_id: int) -> None:
@@ -304,7 +306,7 @@ class GrocyApi:
                                        shopping_location_id
                                        },
                                  timeout=self.timeout)
-        assert response.status_code//100 == 2
+        assert response.status_code//100 == 2, response.reason
 
 
 @dataclass
@@ -1034,7 +1036,7 @@ def get_argparser(stores: Iterable[Store]) -> ArgumentParser:
     chore_schedule = chore.add_parser('schedule',
                                       help='Schedule a chore')
     chore_schedule.set_defaults(func=chore_schedule_cmd)
-    chore_schedule.add_argument('chore', type=int, nargs=1)
+    chore_schedule.add_argument('chore', type=int)
     chore_schedule.add_argument('--at',
                                 metavar='y-m-d h:m:s',
                                 help="The scheduled time in Grocy's time"
