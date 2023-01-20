@@ -265,7 +265,8 @@ class GrocyApi:
                                 timeout=self.timeout)
         assert response.status_code//100 == 2, response.reason
 
-    def did_chore(self, chore_id: int, tracked_time: Optional[str]
+    def did_chore(self, chore_id: int, tracked_time: Optional[str],
+                  skip: bool = False,
                   ) -> GrocyChore:
         ''' Mark a chore as done '''
         if self.dry_run:
@@ -273,7 +274,7 @@ class GrocyApi:
         data = ({}
                 if tracked_time is None
                 else {'tracked_time': tracked_time,
-                      'done_by': 0, 'skipped': False})
+                      'done_by': 0, 'skipped': skip})
         logger.debug(data)
         response = requests.post(f'{self.base_url}/chores/{chore_id}/execute',
                                  headers=self.headers,
@@ -322,6 +323,7 @@ class AppArgs:
     url: str
     chore: int
     show: bool
+    skip: bool
     days: int
     at: Optional[str]
     keep: Literal['later', 'earlier', 'old', 'new']
@@ -937,11 +939,11 @@ def chore_did_cmd(args: AppArgs,
     ''' Mark chore(s) as done.
     '''
     if args.chore is not None:
-        grocy.did_chore(args.chore, args.at)
+        grocy.did_chore(args.chore, args.at, args.skip)
         return
     for chore in grocy.get_overdue_chores(datetime.now()):
         if human_agrees(f'Completed {chore["chore_name"]}?'):
-            grocy.did_chore(chore['id'], args.at)
+            grocy.did_chore(chore['id'], args.at, args.skip)
 
 
 def chore_schedule_cmd(args: AppArgs,
@@ -1029,6 +1031,7 @@ def get_argparser(stores: Iterable[Store]) -> ArgumentParser:
                                  help='Mark chore as done')
     chore_did.set_defaults(func=chore_did_cmd)
     chore_did.add_argument('chore', type=int, nargs='?')
+    chore_did.add_argument('--skip', action='store_true')
     chore_did.add_argument('--at',
                            metavar='y-m-d h:m:s',
                            help="Time the chore was done in Grocy's time"
