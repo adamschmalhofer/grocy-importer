@@ -348,7 +348,7 @@ class CliArgs(AppArgs):
     file: TextIO
     order: int
     url: str
-    chore: int
+    chores: list[int]
     show: bool
     skip: bool
     days: int
@@ -965,15 +965,16 @@ def chore_did_cmd(args: CliArgs,
                   grocy: GrocyApi) -> None:
     ''' Mark chore(s) as done.
     '''
-    if args.chore is not None:
-        grocy.did_chore(args.chore, args.at, args.skip)
+    if len(args.chores) > 0:
+        for chore_id in args.chores:
+            grocy.did_chore(chore_id, args.at, args.skip)
         return
     now = datetime.now()
     for chore in grocy.get_overdue_chores(now):
         if human_agrees(f'Completed {chore["chore_name"]}?'):
             grocy.did_chore(chore['id'], args.at, args.skip)
-    for chore in grocy.get_scheduled_manual_chores(now):
-        if human_agrees(f'Completed {chore["name"]}?'):
+    for choreFull in grocy.get_scheduled_manual_chores(now):
+        if human_agrees(f'Completed {choreFull["name"]}?'):
             grocy.did_chore(chore['id'], args.at, args.skip)
 
 
@@ -984,19 +985,20 @@ def chore_schedule_cmd(args: CliArgs,
     '''
     at = args.at or (datetime.now() + timedelta(days=args.days)
                      ).strftime('%Y-%m-%d %H:%M:%S')
-    try:
-        prev_schedule = grocy.get_chore(args.chore)['rescheduled_date']
-    except KeyError:
-        pass
-    else:
-        if prev_schedule is not None and (args.keep == 'old'
-                                          or prev_schedule < at and
-                                          args.keep == 'earlier'
-                                          or prev_schedule > at and
-                                          args.keep == 'later'
-                                          ):
-            at = prev_schedule
-    grocy.schedule_chore(args.chore, at)
+    for chore_id in args.chores:
+        try:
+            prev_schedule = grocy.get_chore(chore_id)['rescheduled_date']
+        except KeyError:
+            pass
+        else:
+            if prev_schedule is not None and (args.keep == 'old'
+                                              or prev_schedule < at and
+                                              args.keep == 'earlier'
+                                              or prev_schedule > at and
+                                              args.keep == 'later'
+                                              ):
+                at = prev_schedule
+        grocy.schedule_chore(chore_id, at)
 
 
 def chore_show_cmd(args: CliArgs,
@@ -1004,15 +1006,17 @@ def chore_show_cmd(args: CliArgs,
                    grocy: GrocyApi) -> None:
     ''' Show chore(s).
     '''
-    if args.chore is not None:
-        chore = grocy.get_chore(args.chore)
-        print(chore["chore_name"])
+    if len(args.chores) > 0:
+        for chore_id in args.chores:
+            chore = grocy.get_chore(chore_id)
+            print(chore["chore_name"])
         return
     now = datetime.now()
     for chore in grocy.get_overdue_chores(now):
         print(f'{chore["id"]}: {chore["chore_name"]}')
-    for chore in grocy.get_scheduled_manual_chores(now):
-        print(f'{chore["id"]}: {chore["name"]} ({chore["rescheduled_date"]})')
+    for choreFull in grocy.get_scheduled_manual_chores(now):
+        print(f'{chore["id"]}: {choreFull["name"]}'
+              f' ({choreFull["rescheduled_date"]})')
 
 
 def find_item(args: CliArgs,
@@ -1052,7 +1056,11 @@ def get_todotxt_parser() -> ArgumentParser:
     subparsers = chore.add_subparsers()
     chore_show = subparsers.add_parser('ls')
     chore_show.set_defaults(func=chore_show_cmd)
-    chore_show.add_argument('chore', type=int, nargs='?')
+    chore_show.add_argument('chores', type=int, nargs='*')
+
+    chore_add = subparsers.add_parser('add')
+    # chore_add.set_defaults(func=todotxt_chore_add)
+    chore_add.add_argument('chores', type=int, nargs='+')
 
     usage = toplevel.add_parser('usage')
     usage.set_defaults(func=lambda _, __, ___: chore.print_help())
@@ -1092,7 +1100,7 @@ def get_argparser_cli(stores: Iterable[Store]) -> ArgumentParser:
     chore_did = chore.add_parser('did',
                                  help='Mark chore as done')
     chore_did.set_defaults(func=chore_did_cmd)
-    chore_did.add_argument('chore', type=int, nargs='?')
+    chore_did.add_argument('chores', type=int, nargs='*')
     chore_did.add_argument('--skip', action='store_true')
     chore_did.add_argument('--at',
                            metavar='y-m-d h:m:s',
@@ -1101,7 +1109,7 @@ def get_argparser_cli(stores: Iterable[Store]) -> ArgumentParser:
     chore_schedule = chore.add_parser('schedule',
                                       help='Schedule a chore')
     chore_schedule.set_defaults(func=chore_schedule_cmd)
-    chore_schedule.add_argument('chore', type=int)
+    chore_schedule.add_argument('chores', type=int, nargs='+')
     chore_schedule.add_argument('--at',
                                 metavar='y-m-d h:m:s',
                                 help="The scheduled time in Grocy's time"
@@ -1113,7 +1121,7 @@ def get_argparser_cli(stores: Iterable[Store]) -> ArgumentParser:
     chore_show = chore.add_parser('show',
                                   help='Show given chore')
     chore_show.set_defaults(func=chore_show_cmd)
-    chore_show.add_argument('chore', type=int, nargs='?')
+    chore_show.add_argument('chore', type=int, nargs='*')
     return parser
 
 
