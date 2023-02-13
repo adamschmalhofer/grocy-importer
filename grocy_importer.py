@@ -337,6 +337,7 @@ class AppArgs:
     ''' Common args '''
     dry_run: bool
     timeout: int
+    chores: list[int]
     func: Callable[[AppArgs, AppConfig, GrocyApi], None]
 
 
@@ -348,12 +349,17 @@ class CliArgs(AppArgs):
     file: TextIO
     order: int
     url: str
-    chores: list[int]
     show: bool
     skip: bool
     days: int
     at: Optional[str]
     keep: Literal['later', 'earlier', 'old', 'new']
+
+
+@dataclass
+class TodotxtArgs(AppArgs):
+    ''' Structure of our todo-txt CLI args '''
+    environ: TodotxtEnvVariables
 
 
 def normanlize_white_space(orig: str) -> str:
@@ -1001,7 +1007,7 @@ def chore_schedule_cmd(args: CliArgs,
         grocy.schedule_chore(chore_id, at)
 
 
-def chore_show_cmd(args: CliArgs,
+def chore_show_cmd(args: AppArgs,
                    _: AppConfig,
                    grocy: GrocyApi) -> None:
     ''' Show chore(s).
@@ -1031,13 +1037,6 @@ def find_item(args: CliArgs,
                     for p in products))
 
 
-def run_inside_todotxt() -> bool:
-    try:
-        return environ['TODO_FULL_SH'] is not None
-    except KeyError:
-        return False
-
-
 def common_argument_parser(description: str) -> ArgumentParser:
     parser = ArgumentParser(description=description)
     parser.add_argument('--timeout', metavar='N', default=10, type=int,
@@ -1047,9 +1046,16 @@ def common_argument_parser(description: str) -> ArgumentParser:
     return parser
 
 
-def get_todotxt_parser() -> ArgumentParser:
+@dataclass
+class TodotxtEnvVariables(object):
+    TODO_FULL_SH: str
+    TODO_FILE: str
+
+
+def get_todotxt_parser(environ: TodotxtEnvVariables) -> ArgumentParser:
     ''' ArgumentParser factory method for todo.txt plugin '''
     parser = common_argument_parser(description='Interact with Grocy chores')
+    parser.set_defaults(environ=environ)
     toplevel = parser.add_subparsers()
     chore = toplevel.add_parser('chore')
     chore.set_defaults(func=lambda _, __, ___: chore.print_help())
@@ -1123,6 +1129,14 @@ def get_argparser_cli(stores: Iterable[Store]) -> ArgumentParser:
     chore_show.set_defaults(func=chore_show_cmd)
     chore_show.add_argument('chore', type=int, nargs='*')
     return parser
+
+
+def get_argparser(stores: Iterable[Store]) -> ArgumentParser:
+    try:
+        return get_todotxt_parser(TodotxtEnvVariables(environ['TODO_FULL_SH'],
+                                                      environ['TODO_FILE']))
+    except KeyError:
+        return get_argparser_cli(stores)
 
 
 def find_shopping_location_for(store: str,
@@ -1235,9 +1249,7 @@ def export_shopping_list(_: CliArgs,
 
 def main() -> None:
     ''' Run the CLI program '''
-    argparser = (get_argparser_cli([Netto(), Rewe()])
-                 if not run_inside_todotxt()
-                 else get_todotxt_parser())
+    argparser = get_argparser([Netto(), Rewe()])
     argcomplete.autocomplete(argparser)
     args = cast(AppArgs, argparser.parse_args())
     config_path = join(user_config_dir('grocy-importer', 'adaschma.name'),
