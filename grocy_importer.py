@@ -19,6 +19,7 @@ import json
 from functools import partial
 from logging import getLogger
 from datetime import datetime, timedelta
+from os import environ
 
 from bs4 import BeautifulSoup
 import requests
@@ -333,13 +334,18 @@ class GrocyApi:
 
 @dataclass
 class AppArgs:
-    ''' Structure of our CLI args '''
-    timeout: int
-    regex: str
+    ''' Common args '''
     dry_run: bool
+    timeout: int
+    func: Callable[[AppArgs, AppConfig, GrocyApi], None]
+
+
+@dataclass
+class CliArgs(AppArgs):
+    ''' Structure of our CLI args '''
+    regex: str
     store: Literal['netto', 'rewe']
     file: TextIO
-    func: Callable[[AppArgs, AppConfig, GrocyApi], None]
     order: int
     url: str
     chore: int
@@ -407,11 +413,11 @@ class Store(ABC):
         '''
 
     @abstractmethod
-    def get_purchase(self, args: AppArgs) -> list[Purchase]:
+    def get_purchase(self, args: CliArgs) -> list[Purchase]:
         ''' Returns a list of the Items for a given purchase
         '''
 
-    def list_purchases(self, _args: AppArgs, *_: Any) -> None:
+    def list_purchases(self, _args: CliArgs, *_: Any) -> None:
         ''' List purchases from store
 
         List purchases from the store. Override this method if the store file
@@ -446,7 +452,7 @@ class Store(ABC):
                                     help=self.store_info.file_help_msg)
 
     def import_purchase(self,
-                        args: AppArgs,
+                        args: CliArgs,
                         config: AppConfig,
                         grocy: GrocyApi) -> None:
         ''' help importing purchases into grocy '''
@@ -513,12 +519,12 @@ class Rewe(Store):
             ''',
             includes_history=True)
 
-    def list_purchases(self, _args: AppArgs, *_: Any) -> None:
+    def list_purchases(self, _args: CliArgs, *_: Any) -> None:
         print('\n'.join(ReweJsonSchema.load_from_json_file(_args.file
                                                            ).list_orders()
                         ))
 
-    def get_purchase(self, args: AppArgs) -> list[Purchase]:
+    def get_purchase(self, args: CliArgs) -> list[Purchase]:
         data = ReweJsonSchema.load_from_json_file(args.file)
         return [Purchase(line_item.quantity,
                          line_item.total_price / 100,
@@ -545,7 +551,7 @@ class Netto(Store):
             'Path to an e-mail with the "digitaler Kassenbon"',
             )
 
-    def get_purchase(self, args: AppArgs) -> list[Purchase]:
+    def get_purchase(self, args: CliArgs) -> list[Purchase]:
         ''' Import from Netto Marken-Discount
 
         Import a "digitaler Kassenbon" email from the German discount
@@ -922,7 +928,7 @@ class IngredientNormalizer:
                                            convertion_unknown)
 
 
-def recipe_ingredients_checker(args: AppArgs,
+def recipe_ingredients_checker(args: CliArgs,
                                _: AppConfig,
                                grocy: GrocyApi) -> None:
     ''' assist importing recipes from the web
@@ -954,7 +960,7 @@ def human_agrees(question: str) -> bool:
     return 'y' in answer
 
 
-def chore_did_cmd(args: AppArgs,
+def chore_did_cmd(args: CliArgs,
                   _: AppConfig,
                   grocy: GrocyApi) -> None:
     ''' Mark chore(s) as done.
@@ -971,7 +977,7 @@ def chore_did_cmd(args: AppArgs,
             grocy.did_chore(chore['id'], args.at, args.skip)
 
 
-def chore_schedule_cmd(args: AppArgs,
+def chore_schedule_cmd(args: CliArgs,
                        _: AppConfig,
                        grocy: GrocyApi) -> None:
     ''' Schedule chore(s).
@@ -993,7 +999,7 @@ def chore_schedule_cmd(args: AppArgs,
     grocy.schedule_chore(args.chore, at)
 
 
-def chore_show_cmd(args: AppArgs,
+def chore_show_cmd(args: CliArgs,
                    _: AppConfig,
                    grocy: GrocyApi) -> None:
     ''' Show chore(s).
@@ -1009,7 +1015,7 @@ def chore_show_cmd(args: AppArgs,
         print(f'{chore["id"]}: {chore["name"]} ({chore["rescheduled_date"]})')
 
 
-def find_item(args: AppArgs,
+def find_item(args: CliArgs,
               _: AppConfig,
               grocy: GrocyApi) -> None:
     ''' Find default location of a product '''
@@ -1021,13 +1027,41 @@ def find_item(args: AppArgs,
                     for p in products))
 
 
-def get_argparser(stores: Iterable[Store]) -> ArgumentParser:
-    ''' ArgumentParser factory method '''
-    parser = ArgumentParser(description='Help importing into Grocy')
+def run_inside_todotxt() -> bool:
+    try:
+        return environ['TODO_FULL_SH'] is not None
+    except KeyError:
+        return False
+
+
+def common_argument_parser(description: str) -> ArgumentParser:
+    parser = ArgumentParser(description=description)
     parser.add_argument('--timeout', metavar='N', default=10, type=int,
                         help='Override the default timeout for each REST call')
     parser.add_argument('--dry-run', action='store_true',
                         help='perform a trial run with no changes made')
+    return parser
+
+
+def get_todotxt_parser() -> ArgumentParser:
+    ''' ArgumentParser factory method for todo.txt plugin '''
+    parser = common_argument_parser(description='Interact with Grocy chores')
+    toplevel = parser.add_subparsers()
+    chore = toplevel.add_parser('chore')
+    chore.set_defaults(func=lambda _, __, ___: chore.print_help())
+    subparsers = chore.add_subparsers()
+    chore_show = subparsers.add_parser('ls')
+    chore_show.set_defaults(func=chore_show_cmd)
+    chore_show.add_argument('chore', type=int, nargs='?')
+
+    usage = toplevel.add_parser('usage')
+    usage.set_defaults(func=lambda _, __, ___: chore.print_help())
+    return parser
+
+
+def get_argparser_cli(stores: Iterable[Store]) -> ArgumentParser:
+    ''' ArgumentParser factory method '''
+    parser = common_argument_parser(description='Help importing into Grocy')
     subparsers = parser.add_subparsers()
     whereis = subparsers.add_parser('whereis',
                                     help='show location of a product')
@@ -1172,7 +1206,7 @@ def format_shopping_list_item(item: GrocyShoppingListItem,
     return f'{name}, {item["amount"]}{unit}'
 
 
-def export_shopping_list(_: AppArgs,
+def export_shopping_list(_: CliArgs,
                          __: AppConfig,
                          grocy: GrocyApi) -> None:
     ''' export shopping list to todo.txt '''
@@ -1193,7 +1227,9 @@ def export_shopping_list(_: AppArgs,
 
 def main() -> None:
     ''' Run the CLI program '''
-    argparser = get_argparser([Netto(), Rewe()])
+    argparser = (get_argparser_cli([Netto(), Rewe()])
+                 if not run_inside_todotxt()
+                 else get_todotxt_parser())
     argcomplete.autocomplete(argparser)
     args = cast(AppArgs, argparser.parse_args())
     config_path = join(user_config_dir('grocy-importer', 'adaschma.name'),
