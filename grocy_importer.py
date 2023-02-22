@@ -434,24 +434,24 @@ class Store(ABC):
     def create_subcommand(self,
                           purchase_store: Any
                           ) -> None:
-        'Import from DSGVO provided "Meine REWE-Shop-Daten.json"'
-        rewe = (purchase_store
-                .add_parser(self.store_info.name,
-                            help=self.__doc__,
-                            description=self.store_info.help_description)
-                .add_subparsers(metavar='ACTION', required=True))
-        rewe_import = rewe.add_parser('import',
+        'store subcommands'
+        store = (purchase_store
+                 .add_parser(self.store_info.name,
+                             help=self.__doc__,
+                             description=self.store_info.help_description)
+                 .add_subparsers(metavar='ACTION', required=True))
+        import_cmd = store.add_parser('import',
                                       help='import a purchase')
-        rewe_import.set_defaults(func=self.import_purchase)
-        active_subcommands = [rewe_import]
+        import_cmd.set_defaults(func=self.import_purchase)
+        active_subcommands = [import_cmd]
         if self.store_info.includes_history:
-            rewe_list = rewe.add_parser('list', help='list the purchases')
-            rewe_list.set_defaults(func=self.list_purchases)
-            rewe_import.add_argument('--order', type=int, default=1,
-                                     metavar='N',
-                                     help='Which order to import. Defaults to'
-                                          ' 1 (the latest)')
-            active_subcommands.append(rewe_list)
+            list_cmd = store.add_parser('list', help='list the purchases')
+            list_cmd.set_defaults(func=self.list_purchases)
+            import_cmd.add_argument('--order', type=int, default=1,
+                                    metavar='N',
+                                    help='Which order to import. Defaults to'
+                                         ' 1 (the latest)')
+            active_subcommands.append(list_cmd)
         for subcommand in active_subcommands:
             subcommand.add_argument('file',
                                     type=FileType('r', encoding='utf-8'),
