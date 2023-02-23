@@ -20,6 +20,7 @@ from functools import partial
 from logging import getLogger
 from datetime import datetime, timedelta
 from os import environ
+import webbrowser
 
 from bs4 import BeautifulSoup
 import requests
@@ -545,6 +546,22 @@ class Rewe(Store):
                 if line_item.title not in ['TimeSlot',
                                            'Enthaltene Pfandbeträge',
                                            'Getränke-Sperrgutaufschlag']]
+
+    def get_subcommands(self, store: Any) -> Iterable[Any]:
+        yield from super().get_subcommands(store)
+        order = store.add_parser('order',
+                                 help='order items from shopping list')
+        order.set_defaults(func=self.place_order)
+
+    def place_order(self,
+                    args: CliArgs,
+                    config: AppConfig,
+                    grocy: GrocyApi) -> None:
+        items = grocy.get_all_shopping_list()
+        products = grocy.get_all_products_by_id()
+        for p in items:
+            webbrowser.open("https://shop.rewe.de/productList?"
+                            f"search={products[p['product_id']]['name']}")
 
 
 class Netto(Store):
