@@ -559,9 +559,12 @@ class Rewe(Store):
                     grocy: GrocyApi) -> None:
         items = grocy.get_all_shopping_list()
         products = grocy.get_all_products_by_id()
+        units = grocy.get_all_quantity_units_by_id()
         for p in items:
             webbrowser.open("https://shop.rewe.de/productList?"
-                            f"search={products[p['product_id']]['name']}")
+                            f"search={products[p['product_id']]['name']}"
+                            f"&quantity={p['amount']}"
+                            f" {units[p['qu_id']]['name_plural']}")
 
 
 class Netto(Store):
