@@ -440,6 +440,13 @@ class Store(ABC):
                              help=self.__doc__,
                              description=self.store_info.help_description)
                  .add_subparsers(metavar='ACTION', required=True))
+        active_subcommands = self.get_subcommands(store)
+        for subcommand in active_subcommands:
+            subcommand.add_argument('file',
+                                    type=FileType('r', encoding='utf-8'),
+                                    help=self.store_info.file_help_msg)
+
+    def get_subcommands(self, store: Any) -> Iterable[Any]:
         import_cmd = store.add_parser('import',
                                       help='import a purchase')
         import_cmd.set_defaults(func=self.import_purchase)
@@ -452,10 +459,7 @@ class Store(ABC):
                                     help='Which order to import. Defaults to'
                                          ' 1 (the latest)')
             active_subcommands.append(list_cmd)
-        for subcommand in active_subcommands:
-            subcommand.add_argument('file',
-                                    type=FileType('r', encoding='utf-8'),
-                                    help=self.store_info.file_help_msg)
+        return active_subcommands
 
     def import_purchase(self,
                         args: CliArgs,
