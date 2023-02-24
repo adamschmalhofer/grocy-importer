@@ -1151,7 +1151,7 @@ def get_argparser_cli(stores: Iterable[Store]) -> ArgumentParser:
     chore_show = chore.add_parser('show',
                                   help='Show given chore')
     chore_show.set_defaults(func=chore_show_cmd)
-    chore_show.add_argument('chore', type=int, nargs='*')
+    chore_show.add_argument('chores', type=int, nargs='*')
     return parser
 
 
