@@ -893,7 +893,7 @@ class NormalizedIngredientsResult:
 
 @dataclass
 class IngredientNormalizer:
-    ''' WIP
+    ''' Convert ingredients from the store into our grocy names and units
     '''
     barcodes: dict[str, GrocyProductBarCode]
     products: dict[str, GrocyProduct]
@@ -917,7 +917,7 @@ class IngredientNormalizer:
                          ingredients: list[Union[Ingredient,
                                                  UnparseableIngredient]]
                          ) -> NormalizedIngredientsResult:
-        ''' WIP '''
+        ''' Normalize given ingredients with grocy '''
         product_known = []
         product_unknown: list[Union[Ingredient, UnparseableIngredient]] = []
         for ingred in ingredients:
