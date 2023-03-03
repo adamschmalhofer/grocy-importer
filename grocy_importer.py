@@ -159,6 +159,11 @@ class GrocyChoreFull(TypedDict):
     rescheduled_date: NotRequired[Optional[str]]
 
 
+class GrocyUserFields(TypedDict):
+    ''' Grocy UserFields we use '''
+    context: NotRequired[Optional[str]]
+
+
 class GrocyApi:
     ''' Calls to the Grocy REST-API '''
 
@@ -331,6 +336,15 @@ class GrocyApi:
                                        },
                                  timeout=self.timeout)
         assert response.status_code//100 == 2, response.reason
+
+    def get_user_fields(self, entity: str, object_id: int) -> GrocyUserFields:
+        ''' Gets a Grocy user field '''
+        call = f'/userfields/{entity}/{object_id}'
+        response = requests.get(self.base_url + call,
+                                headers=self.headers,
+                                timeout=self.timeout)
+        assert response.status_code//100 == 2, response.reason
+        return cast(GrocyUserFields, response.json())
 
 
 @dataclass
@@ -1043,10 +1057,23 @@ def chore_show_cmd(args: AppArgs,
         return
     now = datetime.now()
     for chore in grocy.get_overdue_chores(now):
-        print(f'{chore["chore_name"]} chore:{chore["id"]}')
+        userfields = show_chore_userfields(grocy.get_user_fields('chores',
+                                                                 chore["id"]))
+        print(f'{chore["chore_name"]}{userfields} chore:{chore["id"]}')
     for choreFull in grocy.get_scheduled_manual_chores(now):
-        print(f'{choreFull["name"]}'
-              f' due:{choreFull["rescheduled_date"]} chore:{chore["id"]}')
+        userfields = show_chore_userfields(grocy.get_user_fields('chores',
+                                                                 choreFull["id"
+                                                                           ]))
+        print(f'{choreFull["name"]}{userfields}'
+              f' due:{choreFull["rescheduled_date"]} chore:{choreFull["id"]}')
+
+
+def show_chore_userfields(fields: GrocyUserFields) -> str:
+    try:
+        return (f" @{fields['context']}"
+                if fields['context'] is not None else '')
+    except KeyError:
+        return ''
 
 
 def find_item(args: CliArgs,
