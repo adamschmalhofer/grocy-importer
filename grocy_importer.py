@@ -1057,23 +1057,30 @@ def chore_show_cmd(args: AppArgs,
         return
     now = datetime.now()
     for chore in grocy.get_overdue_chores(now):
-        userfields = show_chore_userfields(grocy.get_user_fields('chores',
-                                                                 chore["id"]))
-        print(f'{chore["chore_name"]}{userfields} chore:{chore["id"]}')
+        print(' '.join(show_chore(chore['id'],
+                                  chore['chore_name'],
+                                  grocy.get_user_fields('chores', chore["id"])
+                                  )))
     for choreFull in grocy.get_scheduled_manual_chores(now):
-        userfields = show_chore_userfields(grocy.get_user_fields('chores',
-                                                                 choreFull["id"
-                                                                           ]))
-        print(f'{choreFull["name"]}{userfields}'
-              f' due:{choreFull["rescheduled_date"]} chore:{choreFull["id"]}')
+        print(' '.join(show_chore(choreFull['id'],
+                       choreFull['name'],
+                       grocy.get_user_fields('chores', choreFull["id"]),
+                       choreFull['rescheduled_date'])))
 
 
-def show_chore_userfields(fields: GrocyUserFields) -> str:
+def show_chore(chore_id: int, chore_name: str,
+               fields: GrocyUserFields,
+               chore_rescheduled_date: Optional[str] = None
+               ) -> Iterable[str]:
+    yield chore_name
     try:
-        return (f" @{fields['context']}"
-                if fields['context'] is not None else '')
+        if fields['context'] is not None:
+            yield f"@{fields['context']}"
     except KeyError:
-        return ''
+        pass
+    if chore_rescheduled_date is not None:
+        yield f'due:{chore_rescheduled_date}'
+    yield f'chore:{chore_id}'
 
 
 def find_item(args: CliArgs,
