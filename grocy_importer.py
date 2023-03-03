@@ -1043,10 +1043,10 @@ def chore_show_cmd(args: AppArgs,
         return
     now = datetime.now()
     for chore in grocy.get_overdue_chores(now):
-        print(f'{chore["id"]}: {chore["chore_name"]}')
+        print(f'{chore["chore_name"]} chore:{chore["id"]}')
     for choreFull in grocy.get_scheduled_manual_chores(now):
-        print(f'{chore["id"]}: {choreFull["name"]}'
-              f' ({choreFull["rescheduled_date"]})')
+        print(f'{choreFull["name"]}'
+              f' due:{choreFull["rescheduled_date"]} chore:{chore["id"]}')
 
 
 def find_item(args: CliArgs,
