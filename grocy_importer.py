@@ -354,6 +354,7 @@ class AppArgs:
     timeout: int
     chores: list[int]
     func: Callable[[AppArgs, AppConfig, GrocyApi], None]
+    context: Optional[str]
 
 
 @dataclass
@@ -1045,6 +1046,11 @@ def chore_schedule_cmd(args: CliArgs,
         grocy.schedule_chore(chore_id, at)
 
 
+def in_context(fields: GrocyUserFields, context: Optional[str]) -> bool:
+    return (context is None or fields['context'] is None
+            or fields['context'] == context)
+
+
 def chore_show_cmd(args: AppArgs,
                    _: AppConfig,
                    grocy: GrocyApi) -> None:
@@ -1057,14 +1063,18 @@ def chore_show_cmd(args: AppArgs,
         return
     now = datetime.now()
     for chore in grocy.get_overdue_chores(now):
+        fields = grocy.get_user_fields('chores', chore["id"])
+        if not in_context(fields, args.context):
+            continue
         print(' '.join(show_chore(chore['id'],
                                   chore['chore_name'],
-                                  grocy.get_user_fields('chores', chore["id"])
+                                  fields
                                   )))
     for choreFull in grocy.get_scheduled_manual_chores(now):
+        fields = grocy.get_user_fields('chores', choreFull["id"])
         print(' '.join(show_chore(choreFull['id'],
                        choreFull['name'],
-                       grocy.get_user_fields('chores', choreFull["id"]),
+                       fields,
                        choreFull['rescheduled_date'])))
 
 
@@ -1121,6 +1131,9 @@ def get_todotxt_parser(environ: TodotxtEnvVariables) -> ArgumentParser:
     chore_show = subparsers.add_parser('ls')
     chore_show.set_defaults(func=chore_show_cmd)
     chore_show.add_argument('chores', type=int, nargs='*')
+    chore_show.add_argument('--context', '-@', type=str, nargs='?',
+                            help="Show chores with given context or no context"
+                            )
 
     chore_add = subparsers.add_parser('add')
     # chore_add.set_defaults(func=todotxt_chore_add)
@@ -1186,6 +1199,9 @@ def get_argparser_cli(stores: Iterable[Store]) -> ArgumentParser:
                                   help='Show given chore')
     chore_show.set_defaults(func=chore_show_cmd)
     chore_show.add_argument('chores', type=int, nargs='*')
+    chore_show.add_argument('--context', '-@', type=str, nargs='?',
+                            help="Show chores with given context or no context"
+                            )
     return parser
 
 
