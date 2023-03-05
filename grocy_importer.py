@@ -31,6 +31,8 @@ import argcomplete
 
 logger = getLogger(__name__)
 
+GrocyDateTime = str    # 'yyyy-mm-dd HH:MM:SS' or 'yyyy-mm-dd'
+
 
 class UserError(Exception):
     ''' Exception that we display to the human '''
@@ -149,14 +151,20 @@ class GrocyChore(TypedDict):
     ''' A chore as returned from the Grocy API via /chore '''
     id: int
     chore_name: str
-    rescheduled_date: NotRequired[Optional[str]]
+    rescheduled_date: NotRequired[Optional[GrocyDateTime]]
+
+
+class GrocyChoreCompleted(TypedDict):
+    ''' A chore as returned from Grocy API via /chores/.../execute '''
+    chore_id: int
+    tracked_time: GrocyDateTime
 
 
 class GrocyChoreFull(TypedDict):
     ''' A chore as returned from Grocy API via /object '''
     id: int
     name: str
-    rescheduled_date: NotRequired[Optional[str]]
+    rescheduled_date: NotRequired[Optional[GrocyDateTime]]
 
 
 class GrocyUserFields(TypedDict):
@@ -295,10 +303,14 @@ class GrocyApi:
 
     def did_chore(self, chore_id: int, tracked_time: Optional[str],
                   skip: bool = False,
-                  ) -> GrocyChore:
+                  ) -> GrocyChoreCompleted:
         ''' Mark a chore as done '''
         if self.dry_run:
-            return self.get_chore(chore_id)
+            ret = self.get_chore(chore_id)
+            return GrocyChoreCompleted({"chore_id": ret['id'],
+                                        "tracked_time":
+                                            (datetime.now()
+                                             .strftime('%Y-%m-%d'))})
         data = ({}
                 if tracked_time is None
                 else {'tracked_time': tracked_time,
@@ -309,7 +321,7 @@ class GrocyApi:
                                  json=data,
                                  timeout=self.timeout)
         assert response.status_code//100 == 2, response.reason
-        return cast(GrocyChore, response.json())
+        return cast(GrocyChoreCompleted, response.json())
 
     def get_chore(self, chore_id: int) -> GrocyChore:
         ''' Get a chore from grocy '''
@@ -368,7 +380,7 @@ class CliArgs(AppArgs):
     show: bool
     skip: bool
     days: int
-    at: Optional[str]
+    at: Optional[GrocyDateTime]
     keep: Literal['later', 'earlier', 'old', 'new']
 
 
@@ -863,16 +875,16 @@ class Ingredient:
         Ingredient(amount='3 ½', unit='TL', name='Salz',
                    full='3 ½ TL Salz')
         '''
-        match = re.search(r'^\s*(¼|½|¾|\d+(?:\s+(?:\-\s+\d+|½))?)'
-                          r'(?:\s+(\S*[^\s,]))?'
-                          r'(?:\s+([^,(]*[^,(\s]).*)$',
-                          text)
-        if match is None:
+        match_ = re.search(r'^\s*(¼|½|¾|\d+(?:\s+(?:\-\s+\d+|½))?)'
+                           r'(?:\s+(\S*[^\s,]))?'
+                           r'(?:\s+([^,(]*[^,(\s]).*)$',
+                           text)
+        if match_ is None:
             return UnparseableIngredient(text)
-        return Ingredient(match.group(1),
-                          match.group(2) or '',
-                          match.group(3) or '',
-                          match.group(0))
+        return Ingredient(match_.group(1),
+                          match_.group(2) or '',
+                          match_.group(3) or '',
+                          match_.group(0))
 
 
 def cookidoo_ingredients(url: str, timeout: int
@@ -1051,6 +1063,24 @@ def in_context(fields: GrocyUserFields, context: Optional[str]) -> bool:
             or fields['context'] == context)
 
 
+def todotxt_chore_push(args: TodotxtArgs,
+                       _: AppConfig,
+                       grocy: GrocyApi) -> None:
+    ''' Send completed chores in todo.txt to grocy '''
+    time = datetime.now().strftime('%H:%M:%S')
+    with open(args.environ.TODO_FILE, 'r') as f:
+        for line in f:
+            match_ = re.search(r'^x (\d{4}-\d{2}-\d{2}) (?:.* )?chore:(\d+)',
+                               line)
+            if match_ is None:
+                continue
+            did_at: GrocyDateTime = f'{match_.group(1)} {time}'
+            response = grocy.did_chore(int(match_.group(2)),
+                                       tracked_time=did_at)
+            print(f'Completed {response["chore_id"]}'
+                  f' on {response["tracked_time"]}')
+
+
 def chore_show_cmd(args: AppArgs,
                    _: AppConfig,
                    grocy: GrocyApi) -> None:
@@ -1105,13 +1135,11 @@ def find_item(args: CliArgs,
                     for p in products))
 
 
-def common_argument_parser(description: str) -> ArgumentParser:
-    parser = ArgumentParser(description=description)
+def add_common_arguments(parser: ArgumentParser) -> None:
     parser.add_argument('--timeout', metavar='N', default=10, type=int,
                         help='Override the default timeout for each REST call')
     parser.add_argument('--dry-run', action='store_true',
                         help='perform a trial run with no changes made')
-    return parser
 
 
 @dataclass
@@ -1122,22 +1150,24 @@ class TodotxtEnvVariables(object):
 
 def get_todotxt_parser(environ: TodotxtEnvVariables) -> ArgumentParser:
     ''' ArgumentParser factory method for todo.txt plugin '''
-    parser = common_argument_parser(description='Interact with Grocy chores')
+    parser = ArgumentParser(description='Interact with Grocy chores')
     parser.set_defaults(environ=environ)
     toplevel = parser.add_subparsers()
     chore = toplevel.add_parser('chore')
+    add_common_arguments(chore)
     chore.set_defaults(func=lambda _, __, ___: chore.print_help())
     subparsers = chore.add_subparsers()
-    chore_show = subparsers.add_parser('ls')
+    chore_show = subparsers.add_parser('ls', help='List chores from grocy')
     chore_show.set_defaults(func=chore_show_cmd)
     chore_show.add_argument('chores', type=int, nargs='*')
     chore_show.add_argument('--context', '-@', type=str, nargs='?',
                             help="Show chores with given context or no context"
                             )
 
-    chore_add = subparsers.add_parser('add')
-    # chore_add.set_defaults(func=todotxt_chore_add)
-    chore_add.add_argument('chores', type=int, nargs='+')
+    chore_push = subparsers.add_parser('push',
+                                       help='Send completed chores in todo.txt'
+                                            ' to grocy')
+    chore_push.set_defaults(func=todotxt_chore_push)
 
     usage = toplevel.add_parser('usage')
     usage.set_defaults(func=lambda _, __, ___: chore.print_help())
@@ -1146,7 +1176,8 @@ def get_todotxt_parser(environ: TodotxtEnvVariables) -> ArgumentParser:
 
 def get_argparser_cli(stores: Iterable[Store]) -> ArgumentParser:
     ''' ArgumentParser factory method '''
-    parser = common_argument_parser(description='Help importing into Grocy')
+    parser = ArgumentParser(description='Help importing into Grocy')
+    add_common_arguments(parser)
     subparsers = parser.add_subparsers()
     whereis = subparsers.add_parser('whereis',
                                     help='show location of a product')
