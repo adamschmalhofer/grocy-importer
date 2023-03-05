@@ -154,10 +154,23 @@ class GrocyChore(TypedDict):
     rescheduled_date: NotRequired[Optional[GrocyDateTime]]
 
 
+def as_chore_completed(orig: GrocyChore) -> GrocyChoreCompleted:
+    return GrocyChoreCompleted({"chore_id": orig['id'],
+                                "tracked_time": (datetime.now()
+                                                 .strftime('%Y-%m-%d'))})
+
+
 class GrocyChoreCompleted(TypedDict):
     ''' A chore as returned from Grocy API via /chores/.../execute '''
     chore_id: int
     tracked_time: GrocyDateTime
+
+
+def as_chore_full(orig: GrocyChore,
+                  rescheduled_date: Optional[GrocyDateTime] = None
+                  ) -> GrocyChoreFull:
+    return GrocyChoreFull({'id': orig['id'], 'name': orig['chore_name'],
+                           'rescheduled_date': rescheduled_date})
 
 
 class GrocyChoreFull(TypedDict):
@@ -290,7 +303,7 @@ class GrocyApi:
                                 timeout=self.timeout)
         return cast(Iterable[GrocyChoreFull], response.json())
 
-    def schedule_chore(self, chore_id: int, date_time: str
+    def schedule_chore(self, chore_id: int, date_time: GrocyDateTime
                        ) -> None:
         if self.dry_run:
             return
@@ -1070,15 +1083,22 @@ def todotxt_chore_push(args: TodotxtArgs,
     time = datetime.now().strftime('%H:%M:%S')
     with open(args.environ.TODO_FILE, 'r') as f:
         for line in f:
-            match_ = re.search(r'^x (\d{4}-\d{2}-\d{2}) (?:.* )?chore:(\d+)',
+            match_ = re.search(r'^x (\d{4}-\d{2}-\d{2}) (?:.* )?chore:(\d+)'
+                               r'|chore:(\d+) (?:.* )?t:(\d{4}-\d{2}-\d{2})',
                                line)
             if match_ is None:
                 continue
-            did_at: GrocyDateTime = f'{match_.group(1)} {time}'
-            response = grocy.did_chore(int(match_.group(2)),
-                                       tracked_time=did_at)
-            print(f'Completed {response["chore_id"]}'
-                  f' on {response["tracked_time"]}')
+            if match_.group(1) is not None:
+                did_at: GrocyDateTime = f'{match_.group(1)} {time}'
+                response = grocy.did_chore(int(match_.group(2)),
+                                           tracked_time=did_at)
+                print(f'Completed {response["chore_id"]}'
+                      f' on {response["tracked_time"]}')
+            else:
+                grocy.schedule_chore(int(match_.group(3)),
+                                     f'{match_.group(4)}')
+                print(f'Rescheduled {match_.group(3)}'
+                      f' to {match_.group(4)}')
 
 
 def chore_show_cmd(args: AppArgs,
