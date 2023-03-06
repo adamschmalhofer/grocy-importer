@@ -21,6 +21,7 @@ from logging import getLogger
 from datetime import datetime, timedelta
 from os import environ
 import webbrowser
+from shutil import copyfile
 
 from bs4 import BeautifulSoup
 import requests
@@ -1076,16 +1077,40 @@ def in_context(fields: GrocyUserFields, context: Optional[str]) -> bool:
             or fields['context'] == context)
 
 
+def todotxt_chore_pull(args: TodotxtArgs,
+                       config: AppConfig,
+                       grocy: GrocyApi) -> None:
+    '''Replace chores in todo.txt with current ones from grocy'''
+    todo_file = args.environ.TODO_FILE
+    new_content = []
+    regex = re.compile(r'chore:(\d+)')
+    with open(todo_file, 'r') as f:
+        for line in f:
+            match_ = regex.search(line)
+            if match_ is None:
+                new_content.append(line)
+            elif line.startswith('x '):
+                print(f'Warning: completed chore {match_.group(2)}.'
+                      ' Run "push" and "archive" first. Aborting.',
+                      file=sys.stderr)
+                return
+    copyfile(todo_file, todo_file + ".bak")
+    with open(todo_file, 'w') as f:
+        for line in new_content:
+            f.write(line)
+        chore_show_cmd(args, config, grocy, f)
+
+
 def todotxt_chore_push(args: TodotxtArgs,
                        _: AppConfig,
                        grocy: GrocyApi) -> None:
-    ''' Send completed chores in todo.txt to grocy '''
+    ''' Send completed and rescheduled_date chores in todo.txt to grocy '''
     time = datetime.now().strftime('%H:%M:%S')
+    regex = re.compile(r'^x (\d{4}-\d{2}-\d{2}) (?:.* )?chore:(\d+)'
+                       r'|chore:(\d+) (?:.* )?t:(\d{4}-\d{2}-\d{2})')
     with open(args.environ.TODO_FILE, 'r') as f:
         for line in f:
-            match_ = re.search(r'^x (\d{4}-\d{2}-\d{2}) (?:.* )?chore:(\d+)'
-                               r'|chore:(\d+) (?:.* )?t:(\d{4}-\d{2}-\d{2})',
-                               line)
+            match_ = regex.search(line)
             if match_ is None:
                 continue
             if match_.group(1) is not None:
@@ -1103,13 +1128,15 @@ def todotxt_chore_push(args: TodotxtArgs,
 
 def chore_show_cmd(args: AppArgs,
                    _: AppConfig,
-                   grocy: GrocyApi) -> None:
+                   grocy: GrocyApi,
+                   outfile: TextIO = sys.stdout) -> None:
     ''' Show chore(s).
     '''
     if len(args.chores) > 0:
         for chore_id in args.chores:
             chore = grocy.get_chore(chore_id)
-            print(chore["chore_name"])
+            print(chore["chore_name"],
+                  file=outfile)
         return
     now = datetime.now()
     for chore in grocy.get_overdue_chores(now):
@@ -1119,13 +1146,15 @@ def chore_show_cmd(args: AppArgs,
         print(' '.join(show_chore(chore['id'],
                                   chore['chore_name'],
                                   fields
-                                  )))
+                                  )),
+              file=outfile)
     for choreFull in grocy.get_scheduled_manual_chores(now):
         fields = grocy.get_user_fields('chores', choreFull["id"])
         print(' '.join(show_chore(choreFull['id'],
                        choreFull['name'],
                        fields,
-                       choreFull['rescheduled_date'])))
+                       choreFull['rescheduled_date'])),
+              file=outfile)
 
 
 def show_chore(chore_id: int, chore_name: str,
@@ -1185,9 +1214,18 @@ def get_todotxt_parser(environ: TodotxtEnvVariables) -> ArgumentParser:
                             )
 
     chore_push = subparsers.add_parser('push',
-                                       help='Send completed chores in todo.txt'
-                                            ' to grocy')
+                                       help='Send completed and rescheduled'
+                                            ' chores in todo.txt to grocy')
     chore_push.set_defaults(func=todotxt_chore_push)
+
+    chore_pull = subparsers.add_parser('pull',
+                                       help='Replace chores in todo.txt with'
+                                            ' current ones from grocy')
+    chore_pull.set_defaults(func=todotxt_chore_pull)
+    chore_pull.add_argument('chores', type=int, nargs='*')
+    chore_pull.add_argument('--context', '-@', type=str, nargs='?',
+                            help="Show chores with given context or no context"
+                            )
 
     usage = toplevel.add_parser('usage')
     usage.set_defaults(func=lambda _, __, ___: chore.print_help())
