@@ -1191,6 +1191,13 @@ def add_common_arguments(parser: ArgumentParser) -> None:
                         help='perform a trial run with no changes made')
 
 
+def add_chore_show_arguments(parser: ArgumentParser) -> None:
+    parser.add_argument('chores', type=int, nargs='*')
+    parser.add_argument('--context', '-@', type=str, nargs='?',
+                        help="Show chores with given context or no context"
+                        )
+
+
 @dataclass
 class TodotxtEnvVariables(object):
     TODO_FULL_SH: str
@@ -1208,10 +1215,7 @@ def get_todotxt_parser(environ: TodotxtEnvVariables) -> ArgumentParser:
     subparsers = chore.add_subparsers()
     chore_show = subparsers.add_parser('ls', help='List chores from grocy')
     chore_show.set_defaults(func=chore_show_cmd)
-    chore_show.add_argument('chores', type=int, nargs='*')
-    chore_show.add_argument('--context', '-@', type=str, nargs='?',
-                            help="Show chores with given context or no context"
-                            )
+    add_chore_show_arguments(chore_show)
 
     chore_push = subparsers.add_parser('push',
                                        help='Send completed and rescheduled'
@@ -1222,10 +1226,7 @@ def get_todotxt_parser(environ: TodotxtEnvVariables) -> ArgumentParser:
                                        help='Replace chores in todo.txt with'
                                             ' current ones from grocy')
     chore_pull.set_defaults(func=todotxt_chore_pull)
-    chore_pull.add_argument('chores', type=int, nargs='*')
-    chore_pull.add_argument('--context', '-@', type=str, nargs='?',
-                            help="Show chores with given context or no context"
-                            )
+    add_chore_show_arguments(chore_pull)
 
     usage = toplevel.add_parser('usage')
     usage.set_defaults(func=lambda _, __, ___: chore.print_help())
@@ -1287,10 +1288,7 @@ def get_argparser_cli(stores: Iterable[Store]) -> ArgumentParser:
     chore_show = chore.add_parser('show',
                                   help='Show given chore')
     chore_show.set_defaults(func=chore_show_cmd)
-    chore_show.add_argument('chores', type=int, nargs='*')
-    chore_show.add_argument('--context', '-@', type=str, nargs='?',
-                            help="Show chores with given context or no context"
-                            )
+    add_chore_show_arguments(chore_show)
     return parser
 
 
