@@ -132,20 +132,12 @@ class GrocyShoppingListItem(TypedDict):
     qu_id: int
 
 
-class GrocyChoreDetailCore(TypedDict):
-    ''' The main part of the chore of a chore detail from the Grocy API '''
+class GrocyChoreFull(TypedDict):
+    ''' A chore as returned from Grocy API via /object '''
     id: int
     name: str
-
-
-class GrocyChoreDetail(TypedDict):
-    ''' A chore detail as returned from the Grocy API '''
-    chore: GrocyChoreDetailCore
-
-
-def chore_from_detail(orig: GrocyChoreDetail) -> GrocyChore:
-    ''' Convert to a GrocyChore '''
-    return {'id': orig["chore"]["id"], 'chore_name': orig["chore"]["name"]}
+    rescheduled_date: NotRequired[Optional[GrocyDateTime]]
+    description: Optional[str]
 
 
 class GrocyChore(TypedDict):
@@ -172,13 +164,6 @@ def as_chore_full(orig: GrocyChore,
                   ) -> GrocyChoreFull:
     return GrocyChoreFull({'id': orig['id'], 'name': orig['chore_name'],
                            'rescheduled_date': rescheduled_date})
-
-
-class GrocyChoreFull(TypedDict):
-    ''' A chore as returned from Grocy API via /object '''
-    id: int
-    name: str
-    rescheduled_date: NotRequired[Optional[GrocyDateTime]]
 
 
 class GrocyUserFields(TypedDict):
@@ -337,14 +322,14 @@ class GrocyApi:
         assert response.status_code//100 == 2, response.reason
         return cast(GrocyChoreCompleted, response.json())
 
-    def get_chore(self, chore_id: int) -> GrocyChore:
+    def get_chore(self, chore_id: int) -> GrocyChoreFull:
         ''' Get a chore from grocy '''
         url = f'{self.base_url}/chores/{chore_id}'
         response = requests.get(url,
                                 headers=self.headers,
                                 timeout=self.timeout)
         assert response.status_code//100 == 2, f'{url} {response.reason}'
-        return chore_from_detail(cast(GrocyChoreDetail, response.json()))
+        return cast(GrocyChoreFull, response.json()["chore"])
 
     def purchase(self, product_id: int, amount: float, price: float,
                  shopping_location_id: int) -> None:
@@ -1134,9 +1119,14 @@ def chore_show_cmd(args: AppArgs,
     '''
     if len(args.chores) > 0:
         for chore_id in args.chores:
-            chore = grocy.get_chore(chore_id)
-            print(chore["chore_name"],
+            choreFull = grocy.get_chore(chore_id)
+            print(choreFull["name"],
                   file=outfile)
+            if (outfile is sys.stdout
+                    and choreFull["description"] is not None):
+                print("---")
+                print(choreFull["description"])
+                print()
         return
     now = datetime.now()
     for chore in grocy.get_overdue_chores(now):
