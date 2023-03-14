@@ -10,6 +10,8 @@ image: debian:bookworm
 before_script:
   - apt-get --quiet update --yes
   - apt-get --quiet install --yes git clitest todotxt-cli tox
+    python3-docutils flake8 python3-bs4 python3-requests python3-marshmallow
+    python3-appdirs python3-argcomplete
 
 test:
   script:
