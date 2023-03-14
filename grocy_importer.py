@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-''' Help importing into Grocy '''
+''' Help importing into and from Grocy '''
 
 from __future__ import annotations
 
@@ -1032,9 +1032,10 @@ def chore_did_cmd(args: CliArgs,
             grocy.did_chore(chore_id, args.at, args.skip)
         return
     now = datetime.now()
-    for chore in grocy.get_overdue_chores(now):
-        if human_agrees(f'Completed {chore["chore_name"]}?'):
-            grocy.did_chore(chore['id'], args.at, args.skip)
+    if not args.all:
+        for chore in grocy.get_overdue_chores(now):
+            if human_agrees(f'Completed {chore["chore_name"]}?'):
+                grocy.did_chore(chore['id'], args.at, args.skip)
     for choreFull in grocy.get_scheduled_manual_chores(now, args.all):
         if human_agrees(f'Completed {choreFull["name"]}?'):
             grocy.did_chore(chore['id'], args.at, args.skip)
@@ -1135,15 +1136,16 @@ def chore_show_cmd(args: AppArgs,
                 print()
         return
     now = datetime.now()
-    for chore in grocy.get_overdue_chores(now):
-        fields = grocy.get_user_fields('chores', chore["id"])
-        if not in_context(fields, args.context):
-            continue
-        print(' '.join(show_chore(chore['id'],
-                                  chore['chore_name'],
-                                  fields
-                                  )),
-              file=outfile)
+    if not args.all:
+        for chore in grocy.get_overdue_chores(now):
+            fields = grocy.get_user_fields('chores', chore["id"])
+            if not in_context(fields, args.context):
+                continue
+            print(' '.join(show_chore(chore['id'],
+                                      chore['chore_name'],
+                                      fields
+                                      )),
+                  file=outfile)
     for choreFull in grocy.get_scheduled_manual_chores(now, args.all):
         fields = grocy.get_user_fields('chores', choreFull["id"])
         print(' '.join(show_chore(choreFull['id'],

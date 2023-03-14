@@ -93,13 +93,12 @@ First let's see what chores grocy has for us:
 .. code::
  
     $ todo-txt chore ls --all
-    Mop the kitchen floor chore:2
     Change towels in the bathroom chore:1
     Mop the kitchen floor chore:2
     Take out the trash chore:3
     Vacuum the living room floor chore:4
     Clean the litter box chore:5
-    Change the bed sheets due:2023-03-24 chore:6
+    Change the bed sheets chore:6
 
 The --all option gets all chore including the ones that are not overdue or manually scheduled.
 
@@ -116,32 +115,32 @@ Now if we want to have these in our todo.txt we use the pull command:
     05 Download Todo.txt mobile app @Phone
     06 Pick up milk @GroceryStore
     07 Plan backyard herb garden @Home
-    08 Mop the kitchen floor chore:2
-    09 Change towels in the bathroom chore:1
-    10 Mop the kitchen floor chore:2
-    11 Take out the trash chore:3
-    12 Vacuum the living room floor chore:4
-    13 Clean the litter box chore:5
-    14 Change the bed sheets due:2023-03-24 chore:6
+    08 Change towels in the bathroom chore:1
+    09 Mop the kitchen floor chore:2
+    10 Take out the trash chore:3
+    11 Vacuum the living room floor chore:4
+    12 Clean the litter box chore:5
+    13 Change the bed sheets chore:6
     --
-    TODO: 14 of 14 tasks shown
+    TODO: 13 of 13 tasks shown
 
-We can now work with the todo list as we normally would and complete the tasks:
+We can now work with the todo list as we normally would and complete the tasks.
+However we need to keep the completed tasks in todo.txt and only archive them
+later.
 
 .. code::
 
-    $ todo-txt do 9    #=> --exit 0
-    $ todo-txt do 10   #=> --exit 0
-    $ todo-txt do 11   #=> --exit 0
-    $ todo-txt do 12   #=> --exit 0
-    $ todo-txt do 13   #=> --exit 0
-    $ todo-txt do 14   #=> --exit 0
+    $ todo-txt -a do 8    #=> --exit 0
+    $ todo-txt -a do 10   #=> --exit 0
+    $ todo-txt -a do 11   #=> --exit 0
+    $ todo-txt -a do 12   #=> --exit 0
+    $ todo-txt -a do 13   #=> --exit 0
 
 .. code::
 
     $ todo-txt chore pull
-    Warning: completed chore 27. Run "push" and "archive" first. Aborting.
-    $ todo-txt chore push
+    Warning: completed chore 1. Run "push" and "archive" first. Aborting.
+    $ todo-txt chore push    #=> --lines 5
     $ todo-txt archive   #=> --exit 0
     $ todo-txt chore pull
     $ todo-txt ls
