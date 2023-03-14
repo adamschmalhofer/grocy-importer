@@ -144,6 +144,7 @@ class GrocyChore(TypedDict):
     ''' A chore as returned from the Grocy API via /chore '''
     id: int
     chore_name: str
+    description: Optional[str]
     rescheduled_date: NotRequired[Optional[GrocyDateTime]]
 
 
@@ -163,6 +164,7 @@ def as_chore_full(orig: GrocyChore,
                   rescheduled_date: Optional[GrocyDateTime] = None
                   ) -> GrocyChoreFull:
     return GrocyChoreFull({'id': orig['id'], 'name': orig['chore_name'],
+                           'description': orig['description'],
                            'rescheduled_date': rescheduled_date})
 
 
@@ -275,17 +277,19 @@ class GrocyApi:
                                 timeout=self.timeout)
         return cast(Iterable[GrocyChore], response.json())
 
-    def get_scheduled_manual_chores(self, now: datetime
+    def get_scheduled_manual_chores(self, now: datetime, get_all: bool = False
                                     ) -> Iterable[GrocyChoreFull]:
         ''' all manual chores that are scheduled '''
+        params = ({'query[]': ['period_type=manually',
+                               'active=1',
+                               'rescheduled_date>'
+                               + now.strftime('%F %T')
+                               ]}
+                  if not get_all
+                  else {})
         response = requests.get(f'{self.base_url}/objects/chores',
                                 headers=self.headers,
-                                params={'query[]':
-                                        ['period_type=manually',
-                                         'active=1',
-                                         'rescheduled_date>'
-                                         + now.strftime('%F %T')
-                                         ]},
+                                params=params,
                                 timeout=self.timeout)
         return cast(Iterable[GrocyChoreFull], response.json())
 
@@ -366,6 +370,7 @@ class AppArgs:
     chores: list[int]
     func: Callable[[AppArgs, AppConfig, GrocyApi], None]
     context: Optional[str]
+    all: bool
 
 
 @dataclass
@@ -1029,7 +1034,7 @@ def chore_did_cmd(args: CliArgs,
     for chore in grocy.get_overdue_chores(now):
         if human_agrees(f'Completed {chore["chore_name"]}?'):
             grocy.did_chore(chore['id'], args.at, args.skip)
-    for choreFull in grocy.get_scheduled_manual_chores(now):
+    for choreFull in grocy.get_scheduled_manual_chores(now, args.all):
         if human_agrees(f'Completed {choreFull["name"]}?'):
             grocy.did_chore(chore['id'], args.at, args.skip)
 
@@ -1138,7 +1143,7 @@ def chore_show_cmd(args: AppArgs,
                                   fields
                                   )),
               file=outfile)
-    for choreFull in grocy.get_scheduled_manual_chores(now):
+    for choreFull in grocy.get_scheduled_manual_chores(now, args.all):
         fields = grocy.get_user_fields('chores', choreFull["id"])
         print(' '.join(show_chore(choreFull['id'],
                        choreFull['name'],
@@ -1155,7 +1160,7 @@ def show_chore(chore_id: int, chore_name: str,
     try:
         if fields['context'] is not None:
             yield f"@{fields['context']}"
-    except KeyError:
+    except (KeyError, TypeError):
         pass
     if chore_rescheduled_date is not None:
         yield f'due:{chore_rescheduled_date}'
@@ -1186,6 +1191,9 @@ def add_chore_show_arguments(parser: ArgumentParser) -> None:
     parser.add_argument('--context', '-@', type=str, nargs='?',
                         help="Show chores with given context or no context"
                         )
+    parser.add_argument('--all', action='store_true',
+                        help='Show all chores. By default we only show'
+                             ' manually scheduled and overdue chores.')
 
 
 @dataclass
