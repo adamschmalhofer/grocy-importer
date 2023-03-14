@@ -15,4 +15,4 @@ before_script:
 
 test:
   script:
-    - tox
+    - tox run-parallel -e ALL
