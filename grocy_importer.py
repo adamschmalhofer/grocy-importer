@@ -1081,7 +1081,7 @@ def todotxt_chore_pull(args: TodotxtArgs,
             if match_ is None:
                 new_content.append(line)
             elif line.startswith('x '):
-                print(f'Warning: completed chore {match_.group(2)}.'
+                print(f'Warning: completed chore {match_.group(1)}.'
                       ' Run "push" and "archive" first. Aborting.',
                       file=sys.stderr)
                 return
