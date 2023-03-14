@@ -413,22 +413,23 @@ class Purchase:
 def simplify(items: Iterable[Purchase]
              ) -> list[Purchase]:
     '''
-    >>> simplify([parse_purchase(['Milch', '1,00']),
-    ... parse_purchase(['Mehl', '2,00'])])
+    >>> n = Netto()
+    >>> simplify([n._parse_purchase(['Milch', '1,00']),
+    ...           n._parse_purchase(['Mehl', '2,00'])])
     ... #doctest: +NORMALIZE_WHITESPACE
-    [Purchase(amount=1, price='2.00', name='Mehl'),
-     Purchase(amount=1, price='1.00', name='Milch')]
+    [Purchase(amount=1, price=2.0, name='Mehl'),
+     Purchase(amount=1, price=1.0, name='Milch')]
 
-    >>> simplify([parse_purchase(['Milch', '1,00']),
-    ... parse_purchase(['Milch', '1,00'])])
-    [Purchase(amount=2, price='1.00', name='Milch')]
-    >>> simplify([parse_purchase(['Milch', '1,00']),
-    ... parse_purchase(['Mehl', '2,00']),
-    ... parse_purchase(['Milch', '1,00'])])
+    >>> simplify([n._parse_purchase(['Milch', '1,00']),
+    ...           n._parse_purchase(['Milch', '1,00'])])
+    [Purchase(amount=2, price=1.0, name='Milch')]
+    >>> simplify([n._parse_purchase(['Milch', '1,00']),
+    ...           n._parse_purchase(['Mehl', '2,00']),
+    ...           n._parse_purchase(['Milch', '1,00'])])
     ... #doctest: +NORMALIZE_WHITESPACE
-    [Purchase(amount=1, price='2.00', name='Mehl'),
-     Purchase(amount=2, price='1.00', name='Milch')]
-    >>> simplify([parse_purchase(['Punkte-Gutschein', '-1,05'])])
+    [Purchase(amount=1, price=2.0, name='Mehl'),
+     Purchase(amount=2, price=1.0, name='Milch')]
+    >>> simplify([n._parse_purchase(['Punkte-Gutschein', '-1,05'])])
     []
 
     '''
