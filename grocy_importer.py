@@ -1207,6 +1207,7 @@ def get_todotxt_parser(environ: TodotxtEnvVariables) -> ArgumentParser:
     ''' ArgumentParser factory method for todo.txt plugin '''
     parser = ArgumentParser(description='Interact with Grocy chores')
     parser.set_defaults(environ=environ)
+    add_common_arguments(parser)
     toplevel = parser.add_subparsers()
     chore = toplevel.add_parser('chore')
     add_common_arguments(chore)
