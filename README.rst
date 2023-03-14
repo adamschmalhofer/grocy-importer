@@ -126,4 +126,32 @@ Now if we want to have these in our todo.txt we use the pull command:
     --
     TODO: 14 of 14 tasks shown
 
+We can now work with the todo list as we normally would and complete the tasks:
 
+.. code::
+
+    $ todo-txt do 9    #=> --exit 0
+    $ todo-txt do 10   #=> --exit 0
+    $ todo-txt do 11   #=> --exit 0
+    $ todo-txt do 12   #=> --exit 0
+    $ todo-txt do 13   #=> --exit 0
+    $ todo-txt do 14   #=> --exit 0
+
+.. code::
+
+    $ todo-txt chore pull
+    Warning: completed chore 27. Run "push" and "archive" first. Aborting.
+    $ todo-txt chore push
+    $ todo-txt archive   #=> --exit 0
+    $ todo-txt chore pull
+    $ todo-txt ls
+    1 Call Mom @Phone +Family
+    2 Schedule annual checkup +Health
+    3 Outilne chapter 5 +Novel @Computer
+    4 Add cover sheets @Office +TPSReports
+    5 Download Todo.txt mobile app @Phone
+    6 Pick up milk @GroceryStore
+    7 Plan backyard herb garden @Home
+    8 Mop the kitchen floor chore:2
+    --
+    TODO: 8 of 8 tasks shown
