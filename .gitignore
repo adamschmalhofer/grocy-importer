@@ -1,0 +1,5 @@
+/tests/setup/todo.txt
+/tests/setup/todo.txt.bak
+/tests/setup/done.txt
+/.tox
+/grocy_importer.egg-info/
