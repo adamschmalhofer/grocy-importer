@@ -5,7 +5,7 @@ sast:
   stage: test
 include:
   - template: Security/SAST.gitlab-ci.yml
-image: debian:stable
+image: debian:bookworm
 
 before_script:
   - apt-get --quiet update --yes
