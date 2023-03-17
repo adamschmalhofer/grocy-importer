@@ -28,6 +28,7 @@ import requests
 from marshmallow import Schema, fields, EXCLUDE, post_load
 from appdirs import user_config_dir
 import argcomplete
+from sh import pdf2txt
 
 
 logger = getLogger(__name__)
@@ -379,6 +380,7 @@ class CliArgs(AppArgs):
     regex: str
     store: Literal['netto', 'rewe']
     file: TextIO
+    file_path: str
     order: int
     url: str
     show: bool
@@ -406,7 +408,7 @@ class Purchase:
     Unlike Grocy the price is that total rather then per unit.
     '''
     amount: Union[int, float]
-    price: float
+    price: float    # total
     name: str
 
 
@@ -475,9 +477,15 @@ class Store(ABC):
                  .add_subparsers(metavar='ACTION', required=True))
         active_subcommands = self.get_subcommands(store)
         for subcommand in active_subcommands:
-            subcommand.add_argument('file',
-                                    type=FileType('r', encoding='utf-8'),
-                                    help=self.store_info.file_help_msg)
+            if self.store_info.use_file_path:
+                subcommand.add_argument('file_path',
+                                        type=str,
+                                        metavar='file',
+                                        help=self.store_info.file_help_msg)
+            else:
+                subcommand.add_argument('file',
+                                        type=FileType('r', encoding='utf-8'),
+                                        help=self.store_info.file_help_msg)
 
     def get_subcommands(self, store: Any) -> Iterable[Any]:
         import_cmd = store.add_parser('import',
@@ -546,6 +554,7 @@ class StoreSubcommandInfo:
     help_description: str
     file_help_msg: str
     includes_history: bool = False
+    use_file_path: bool = False
 
 
 class Rewe(Store):
@@ -597,6 +606,72 @@ class Rewe(Store):
                             f"search={products[p['product_id']]['name']}"
                             f"&quantity={p['amount']}"
                             f" {units[p['qu_id']]['name_plural']}")
+
+
+class DrogerieMarkt(Store):
+    'German retail store chain dm-drogerie markt'
+
+    @property
+    def store_info(self) -> StoreSubcommandInfo:
+        return StoreSubcommandInfo(
+                'dm',
+                '''
+                Import a "Kassenbon als PDF" downloadable from webpage under
+                "Meine Markt-Einkäufe".
+                ''',
+                'Path to pdf',
+                use_file_path=True
+                )
+
+    def get_purchase(self, args: CliArgs) -> list[Purchase]:
+        return list(self._get_purchases(list(pdf2txt(args.file_path))))
+
+    @staticmethod
+    def _get_purchases(ebon: list[str]) -> Iterable[Purchase]:
+        r'''
+
+        >>> list(DrogerieMarkt._get_purchases([
+        ... '15.03.2023  15:40  3022/2  288904/2   5166\n',
+        ... '\n',
+        ... 'dmBio Streichcr. Curry PM 180g     1,45  2\n',
+        ... '\n',
+        ... 'CD Deo Roll-on Bio Granatapfel     1,95  1\n',
+        ... '\n',
+        ... 'SUMME EUR                          3,40\n',
+        ... '\n',
+        ... 'AMEX EUR                          -3,40\n',
+        ... '\n',
+        ... 'MwSt-Satz       Brutto     Netto      MwSt\n']))
+        ... #doctest: +NORMALIZE_WHITESPACE
+        [Purchase(amount=1, price=1.45, name='dmBio Streichcr. Curry PM 180g'),
+         Purchase(amount=1, price=1.95, name='CD Deo Roll-on Bio Granatapfel')]
+        >>> list(DrogerieMarkt._get_purchases([
+        ... '09.02.2023  18:24  3022/1  328288/3   2656\n',
+        ... '\n',
+        ... 'Kodak Artikel Sofort               0,10  1\n',
+        ... '\n',
+        ... '4x 1,25 dmBio Milch 1,5% 1L        5,00  2\n',
+        ... '\n',
+        ... '2x 1,95 Dental Delight ZC Pola     3,90  1\n',
+        ... '\n',
+        ... 'SUMME EUR                          9,00\n']))
+        ... #doctest: +NORMALIZE_WHITESPACE
+        [Purchase(amount=1, price=0.1, name='Kodak Artikel Sofort'),
+         Purchase(amount=4, price=5.0, name='dmBio Milch 1,5% 1L'),
+         Purchase(amount=2, price=3.9, name='Dental Delight ZC Pola')]
+        '''
+        regex = re.compile(r'^(?:(\d+)x \d+,\d\d\s+)?(.*?)\s+'
+                           r'(\d+,\d\d)\s+[12]')
+        for line in ebon[1:]:
+            if line.startswith('SUMME '):
+                break
+            if line.isspace():
+                continue
+            match_ = regex.search(line)
+            assert match_ is not None
+            yield Purchase(int(match_.group(1) or 1),
+                           float(match_.group(3).replace(',', '.')),
+                           match_.group(2))
 
 
 class Netto(Store):
@@ -1412,7 +1487,7 @@ def export_shopping_list(_: CliArgs,
 
 def main() -> None:
     ''' Run the CLI program '''
-    argparser = get_argparser([Netto(), Rewe()])
+    argparser = get_argparser([Netto(), Rewe(), DrogerieMarkt()])
     argcomplete.autocomplete(argparser)
     args = cast(AppArgs, argparser.parse_args())
     config_path = join(user_config_dir('grocy-importer', 'adaschma.name'),
