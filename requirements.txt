@@ -3,3 +3,4 @@ requests
 marshmallow
 appdirs
 argcomplete
+pdfminer.six

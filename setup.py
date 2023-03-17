@@ -16,4 +16,5 @@ setup(name='grocy_importer',
             'marshmallow',
             'appdirs',
             'argcomplete',
+            'pdfminer.six',
           ])

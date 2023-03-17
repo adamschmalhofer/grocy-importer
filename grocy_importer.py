@@ -28,7 +28,7 @@ import requests
 from marshmallow import Schema, fields, EXCLUDE, post_load
 from appdirs import user_config_dir
 import argcomplete
-from sh import pdf2txt
+from pdfminer.high_level import extract_text
 
 
 logger = getLogger(__name__)
@@ -624,37 +624,39 @@ class DrogerieMarkt(Store):
                 )
 
     def get_purchase(self, args: CliArgs) -> list[Purchase]:
-        return list(self._get_purchases(list(pdf2txt(args.file_path))))
+        return list(self._get_purchases(extract_text(args.file_path)))
 
     @staticmethod
-    def _get_purchases(ebon: list[str]) -> Iterable[Purchase]:
+    def _get_purchases(ebon: str) -> Iterable[Purchase]:
         r'''
 
-        >>> list(DrogerieMarkt._get_purchases([
-        ... '15.03.2023  15:40  3022/2  288904/2   5166\n',
-        ... '\n',
-        ... 'dmBio Streichcr. Curry PM 180g     1,45  2\n',
-        ... '\n',
-        ... 'CD Deo Roll-on Bio Granatapfel     1,95  1\n',
-        ... '\n',
-        ... 'SUMME EUR                          3,40\n',
-        ... '\n',
-        ... 'AMEX EUR                          -3,40\n',
-        ... '\n',
-        ... 'MwSt-Satz       Brutto     Netto      MwSt\n']))
+        >>> list(DrogerieMarkt._get_purchases(
+        ... """15.03.2023  15:40  3022/2  288904/2   5166
+        ...
+        ... dmBio Streichcr. Curry PM 180g     1,45  2
+        ...
+        ... CD Deo Roll-on Bio Granatapfel     1,95  1
+        ...
+        ... SUMME EUR                          3,40
+        ...
+        ... AMEX EUR                          -3,40
+        ...
+        ... MwSt-Satz       Brutto     Netto      MwSt
+        ... """))
         ... #doctest: +NORMALIZE_WHITESPACE
         [Purchase(amount=1, price=1.45, name='dmBio Streichcr. Curry PM 180g'),
          Purchase(amount=1, price=1.95, name='CD Deo Roll-on Bio Granatapfel')]
-        >>> list(DrogerieMarkt._get_purchases([
-        ... '09.02.2023  18:24  3022/1  328288/3   2656\n',
-        ... '\n',
-        ... 'Kodak Artikel Sofort               0,10  1\n',
-        ... '\n',
-        ... '4x 1,25 dmBio Milch 1,5% 1L        5,00  2\n',
-        ... '\n',
-        ... '2x 1,95 Dental Delight ZC Pola     3,90  1\n',
-        ... '\n',
-        ... 'SUMME EUR                          9,00\n']))
+        >>> list(DrogerieMarkt._get_purchases(
+        ... """09.02.2023  18:24  3022/1  328288/3   2656
+        ...
+        ... Kodak Artikel Sofort               0,10  1
+        ...
+        ... 4x 1,25 dmBio Milch 1,5% 1L        5,00  2
+        ...
+        ... 2x 1,95 Dental Delight ZC Pola     3,90  1
+        ...
+        ... SUMME EUR                          9,00
+        ... """))
         ... #doctest: +NORMALIZE_WHITESPACE
         [Purchase(amount=1, price=0.1, name='Kodak Artikel Sofort'),
          Purchase(amount=4, price=5.0, name='dmBio Milch 1,5% 1L'),
@@ -662,10 +664,10 @@ class DrogerieMarkt(Store):
         '''
         regex = re.compile(r'^(?:(\d+)x \d+,\d\d\s+)?(.*?)\s+'
                            r'(\d+,\d\d)\s+[12]')
-        for line in ebon[1:]:
+        for line in ebon.splitlines()[1:]:
             if line.startswith('SUMME '):
                 break
-            if line.isspace():
+            if len(line) == 0:
                 continue
             match_ = regex.search(line)
             assert match_ is not None
