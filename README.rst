@@ -172,10 +172,13 @@ later.
     $ todo-txt -a do 12   #=> --exit 0
     $ todo-txt -a do 13   #=> --exit 0
 
+
+
 .. code::
 
     $ todo-txt chore pull
-    Warning: completed chore 1. Run "push" and "archive" first. Aborting.
+    Error: chore 1 is marked as marked as done todo.txt.
+     Run "push" and "archive" first. Aborting.
     $ todo-txt chore push    #=> --lines 5
     $ todo-txt archive   #=> --exit 0
     $ todo-txt chore pull

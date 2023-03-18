@@ -185,11 +185,8 @@ class GrocyApi:
         self.timeout = timeout
 
     def assert_valid_response(self, response: requests.Response) -> None:
-        if response.status_code//100 == 2:
-            return
-        print(f'Connection to Grocy failed: {response.reason}',
-              file=sys.stderr)
-        sys.exit(2)
+        if response.status_code//100 != 2:
+            raise UserError(f'Connection to Grocy failed: {response.reason}')
 
     def get_all_product_barcodes(self) -> dict[str, GrocyProductBarCode]:
         ''' all product barcodes known to grocy '''
@@ -1179,10 +1176,9 @@ def todotxt_chore_pull(args: TodotxtArgs,
             if match_ is None:
                 new_content.append(line)
             elif line.startswith('x '):
-                print(f'Warning: completed chore {match_.group(1)}.'
-                      ' Run "push" and "archive" first. Aborting.',
-                      file=sys.stderr)
-                return
+                raise UserError(f'chore {match_.group(1)} is marked as marked'
+                                ' as done todo.txt.\n'
+                                ' Run "push" and "archive" first. Aborting.')
     copyfile(todo_file, todo_file + ".bak")
     with open(todo_file, 'w') as f:
         for line in new_content:
@@ -1477,9 +1473,9 @@ def convert_unit(convertions: Iterable[GrocyQUnitConvertion],
                        and c['product_id'] in [None, product_id]],
                       key=lambda o: o['product_id'] is None
                       )[0]['factor']
-    except IndexError:
-        sys.exit(f'No convertion found for {from_qu_id} to {to_qu_id} for'
-                 f' {product_id}')
+    except IndexError as ex:
+        raise UserError(f'No convertion found for {from_qu_id} to {to_qu_id}'
+                        f' for {product_id}') from ex
 
 
 def format_shopping_list_item(item: GrocyShoppingListItem,

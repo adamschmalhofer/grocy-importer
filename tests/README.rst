@@ -37,7 +37,7 @@ Should show a nice error message when it can't connect to the server:
 .. code::
 
     $ GROCY_BASE_URL='http://example.com/' GROCY_API_KEY='abc' grocy_importer.py chore show
-    Connection to Grocy failed: Not Found
+    Error: Connection to Grocy failed: Not Found
 
 
 Recipe
