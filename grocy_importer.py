@@ -29,6 +29,7 @@ from marshmallow import Schema, fields, EXCLUDE, post_load
 from appdirs import user_config_dir
 import argcomplete
 from pdfminer.high_level import extract_text
+from recipe_scrapers import scrape_me
 
 
 logger = getLogger(__name__)
@@ -969,14 +970,13 @@ class Ingredient:
                           match_.group(0))
 
 
-def cookidoo_ingredients(url: str, timeout: int
-                         ) -> list[Union[Ingredient, UnparseableIngredient]]:
+def recipe_ingredients(url: str, timeout: int
+                       ) -> list[Union[Ingredient, UnparseableIngredient]]:
     ''' Find all ingrediant of the recipe '''
-    response = requests.get(url, timeout=timeout)
-    soup = BeautifulSoup(response.text, 'html5lib')
-    ingredients = [Ingredient.parse(normanlize_white_space(item.get_text())
+    scrapper = scrape_me(url, timeout=timeout, wild_mode=True)
+    ingredients = [Ingredient.parse(normanlize_white_space(item)
                                     )
-                   for item in soup.select('core-list-section ul li')]
+                   for item in scrapper.ingredients()]
     return ingredients
 
 
@@ -1079,7 +1079,7 @@ def recipe_ingredients_checker(args: CliArgs,
     Check if ingredients and their units are known to grocy for a recipe to be
     imported
     '''
-    ingredients = cookidoo_ingredients(args.url, args.timeout)
+    ingredients = recipe_ingredients(args.url, args.timeout)
     logger.info("Found %s ingredients", len(ingredients))
     products = grocy.get_all_products()
     products_by_id = grocy.rearrange_by_id(products)

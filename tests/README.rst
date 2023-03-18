@@ -46,7 +46,7 @@ we only include cases that are not useful there.
 
     $ grocy_importer.py recipe https://cookidoo.de/recipes/recipe/de-DE/r94080
     Unknown ingredients:
-    Ingredient(amount='4', unit='dessert', name='apples', full='4 dessert apples, cored, quartered (approx. 600 g)')
+    Ingredient(amount='4', unit='dessert', name='apples', full='4 dessert apples')
     Ingredient(amount='½', unit='-', name='1 tsp ground cinnamon', full='½ - 1 tsp ground cinnamon')
     Ingredient(amount='1', unit='pinch', name='ground nutmeg', full='1 pinch ground nutmeg')
     Ingredient(amount='80', unit='g', name='rolled oats', full='80 g rolled oats')

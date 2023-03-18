@@ -5,3 +5,4 @@ appdirs
 argcomplete
 pdfminer.six
 html5lib
+recipe_scrappers
