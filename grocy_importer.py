@@ -1033,7 +1033,8 @@ class IngredientNormalizer:
         for ingred in ingredients:
             if isinstance(ingred, UnparseableIngredient):
                 product_unknown.append(ingred)
-            elif ingred.name.lower() not in grocy_products and ingred.name != '':
+            elif (ingred.name.lower() not in grocy_products
+                  and ingred.name != ''):
                 try:
                     product_known.append(self.apply_alias(ingred))
                 except KeyError:
