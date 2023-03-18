@@ -184,11 +184,19 @@ class GrocyApi:
         self.only_active = {'query[]': ['active=1']}
         self.timeout = timeout
 
+    def assert_valid_response(self, response: requests.Response) -> None:
+        if response.status_code//100 == 2:
+            return
+        print(f'Connection to Grocy failed: {response.reason}',
+              file=sys.stderr)
+        sys.exit(2)
+
     def get_all_product_barcodes(self) -> dict[str, GrocyProductBarCode]:
         ''' all product barcodes known to grocy '''
         response = requests.get(self.base_url + '/objects/product_barcodes',
                                 headers=self.headers,
                                 timeout=self.timeout)
+        self.assert_valid_response(response)
         return {p['barcode']: p for p in response.json()}
 
     def get_all_products(self) -> dict[str, GrocyProduct]:
@@ -197,6 +205,7 @@ class GrocyApi:
                                 headers=self.headers,
                                 params=self.only_active,
                                 timeout=self.timeout)
+        self.assert_valid_response(response)
         return {p['name']: p for p in response.json()}
 
     def rearrange_by_id(self, by_name: dict[str, GrocyProduct]
@@ -210,6 +219,7 @@ class GrocyApi:
                                 headers=self.headers,
                                 params=self.only_active,
                                 timeout=self.timeout)
+        self.assert_valid_response(response)
         return {p['id']: p for p in response.json()}
 
     def get_all_product_groups(self) -> dict[int, GrocyProductGroup]:
@@ -217,6 +227,7 @@ class GrocyApi:
         response = requests.get(self.base_url + '/objects/product_groups',
                                 headers=self.headers,
                                 timeout=self.timeout)
+        self.assert_valid_response(response)
         return {p['id']: p for p in response.json()}
 
     def get_all_shopping_locations(self) -> Iterable[GrocyShoppingLocation]:
@@ -224,6 +235,7 @@ class GrocyApi:
         response = requests.get(self.base_url + '/objects/shopping_locations',
                                 headers=self.headers,
                                 timeout=self.timeout)
+        self.assert_valid_response(response)
         return cast(Iterable[GrocyShoppingLocation], response.json())
 
     def get_location_names(self) -> Mapping[int, str]:
@@ -231,6 +243,7 @@ class GrocyApi:
         response = requests.get(self.base_url + '/objects/locations',
                                 headers=self.headers,
                                 timeout=self.timeout)
+        self.assert_valid_response(response)
         return {location['id']: location['name']
                 for location in cast(Iterable[GrocyLocation], response.json())}
 
@@ -239,6 +252,7 @@ class GrocyApi:
         response = requests.get(self.base_url + '/objects/quantity_units',
                                 headers=self.headers,
                                 timeout=self.timeout)
+        self.assert_valid_response(response)
         return cast(Iterable[GrocyQuantityUnit], response.json())
 
     def get_all_quantity_units_by_id(self) -> dict[int, GrocyQuantityUnit]:
@@ -246,6 +260,7 @@ class GrocyApi:
         response = requests.get(self.base_url + '/objects/quantity_units',
                                 headers=self.headers,
                                 timeout=self.timeout)
+        self.assert_valid_response(response)
         return {p['id']: p for p in response.json()}
 
     def get_all_quantity_unit_convertions(self
@@ -255,6 +270,7 @@ class GrocyApi:
                                 + '/objects/quantity_unit_conversions',
                                 headers=self.headers,
                                 timeout=self.timeout)
+        self.assert_valid_response(response)
         return cast(Iterable[GrocyQUnitConvertion], response.json())
 
     def get_all_shopping_list(self) -> Iterable[GrocyShoppingListItem]:
@@ -263,6 +279,7 @@ class GrocyApi:
                                 + '/objects/shopping_list',
                                 headers=self.headers,
                                 timeout=self.timeout)
+        self.assert_valid_response(response)
         return cast(Iterable[GrocyShoppingListItem], response.json())
 
     def get_overdue_chores(self, now: datetime) -> Iterable[GrocyChore]:
@@ -274,6 +291,7 @@ class GrocyApi:
                                         ['next_estimated_execution_time<'
                                          + now.strftime('%F %T')]},
                                 timeout=self.timeout)
+        self.assert_valid_response(response)
         return cast(Iterable[GrocyChore], response.json())
 
     def get_scheduled_manual_chores(self, now: datetime, get_all: bool = False
@@ -290,6 +308,7 @@ class GrocyApi:
                                 headers=self.headers,
                                 params=params,
                                 timeout=self.timeout)
+        self.assert_valid_response(response)
         return cast(Iterable[GrocyChoreFull], response.json())
 
     def schedule_chore(self, chore_id: int, date_time: GrocyDateTime
@@ -301,7 +320,7 @@ class GrocyApi:
                                 headers=self.headers,
                                 json=data,
                                 timeout=self.timeout)
-        assert response.status_code//100 == 2, response.reason
+        self.assert_valid_response(response)
 
     def did_chore(self, chore_id: int, tracked_time: Optional[str],
                   skip: bool = False,
@@ -322,7 +341,7 @@ class GrocyApi:
                                  headers=self.headers,
                                  json=data,
                                  timeout=self.timeout)
-        assert response.status_code//100 == 2, response.reason
+        self.assert_valid_response(response)
         return cast(GrocyChoreCompleted, response.json())
 
     def get_chore(self, chore_id: int) -> GrocyChoreFull:
@@ -331,7 +350,7 @@ class GrocyApi:
         response = requests.get(url,
                                 headers=self.headers,
                                 timeout=self.timeout)
-        assert response.status_code//100 == 2, f'{url} {response.reason}'
+        self.assert_valid_response(response)
         return cast(GrocyChoreFull, response.json()["chore"])
 
     def purchase(self, product_id: int, amount: float, price: float,
@@ -349,7 +368,7 @@ class GrocyApi:
                                        shopping_location_id
                                        },
                                  timeout=self.timeout)
-        assert response.status_code//100 == 2, response.reason
+        self.assert_valid_response(response)
 
     def get_user_fields(self, entity: str, object_id: int) -> GrocyUserFields:
         ''' Gets a Grocy user field '''
@@ -357,7 +376,7 @@ class GrocyApi:
         response = requests.get(self.base_url + call,
                                 headers=self.headers,
                                 timeout=self.timeout)
-        assert response.status_code//100 == 2, response.reason
+        self.assert_valid_response(response)
         return cast(GrocyUserFields, response.json())
 
 
@@ -1495,11 +1514,19 @@ def export_shopping_list(_: CliArgs,
 
 
 def load_config() -> Tuple[AppConfig, str]:
-    config_path = join(user_config_dir('grocy-importer', 'adaschma.name'),
-                       'config.ini')
-    config_parser = ConfigParser()
-    config_parser.read(config_path)
-    return (cast(AppConfig, config_parser), config_path)
+    try:
+        return (AppConfig({'grocy':
+                          AppConfigGrocySection({'base_url':
+                                                 environ['GROCY_BASE_URL'],
+                                                 'api_key':
+                                                 environ['GROCY_API_KEY']})}),
+                '$environ')
+    except KeyError:
+        config_path = join(user_config_dir('grocy-importer', 'adaschma.name'),
+                           'config.ini')
+        config_parser = ConfigParser()
+        config_parser.read(config_path)
+        return (cast(AppConfig, config_parser), config_path)
 
 
 def main() -> None:

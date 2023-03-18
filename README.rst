@@ -85,6 +85,9 @@ match your setup. Especially grocy's base_url and api_key need to be set.
     
     #shopping_location_id = 14
 
+Alternatively you can set the $GROCY_BASE_URL and $GROCY_API_KEY environment variables e.g.
+in your todo.cfg.
+
 
 Usage
 =====

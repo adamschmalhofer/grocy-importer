@@ -28,6 +28,21 @@ we only include cases that are not useful there.
       --timeout N           Override the default timeout for each REST call
       --dry-run             perform a trial run with no changes made
 
+
+Error messages
+--------------
+
+Should show a nice error message when it can't connect to the server:
+
+.. code::
+
+    $ GROCY_BASE_URL='http://example.com/' GROCY_API_KEY='abc' grocy_importer.py chore show
+    Connection to Grocy failed: Not Found
+
+
+Recipe
+------
+
 .. code::
 
     $ grocy_importer.py recipe --help
