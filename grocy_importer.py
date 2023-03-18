@@ -9,7 +9,7 @@ import re
 from abc import (ABC, abstractmethod)
 from email.parser import Parser
 from typing import (Union, Iterable, Mapping, Optional, TextIO, TypedDict,
-                    Literal, Callable, cast, Any, NotRequired)
+                    Literal, Callable, cast, Any, NotRequired, Tuple)
 from dataclasses import dataclass
 from itertools import groupby
 from configparser import ConfigParser
@@ -55,15 +55,12 @@ class AppConfigPurchaseSection(TypedDict):
     shopping_location_id: int
 
 
-class AppConfigRequired(TypedDict):
+class AppConfig(TypedDict):
     ''' Structure of our config.ini '''
     grocy: AppConfigGrocySection
-
-
-class AppConfig(AppConfigRequired, total=False):
-    ''' Structure of our config.ini '''
-    netto: AppConfigPurchaseSection
-    rewe: AppConfigPurchaseSection
+    netto: NotRequired[AppConfigPurchaseSection]
+    rewe: NotRequired[AppConfigPurchaseSection]
+    dm: NotRequired[AppConfigPurchaseSection]
 
 
 class GrocyProductBarCode(TypedDict):
@@ -1281,9 +1278,15 @@ def add_chore_show_arguments(parser: ArgumentParser) -> None:
 
 
 @dataclass
-class TodotxtEnvVariables(object):
+class TodotxtEnvVariables:
     TODO_FULL_SH: str
     TODO_FILE: str
+
+
+@dataclass
+class GrocyEnvVariables:
+    GROCY_API_KEY: str
+    GROCY_BASE_URL: str
 
 
 def get_todotxt_parser(environ: TodotxtEnvVariables) -> ArgumentParser:
@@ -1491,16 +1494,20 @@ def export_shopping_list(_: CliArgs,
                     for item in sorted(shopping_list, key=product_group_id)))
 
 
+def load_config() -> Tuple[AppConfig, str]:
+    config_path = join(user_config_dir('grocy-importer', 'adaschma.name'),
+                       'config.ini')
+    config_parser = ConfigParser()
+    config_parser.read(config_path)
+    return (cast(AppConfig, config_parser), config_path)
+
+
 def main() -> None:
     ''' Run the CLI program '''
     argparser = get_argparser([Netto(), Rewe(), DrogerieMarkt()])
     argcomplete.autocomplete(argparser)
     args = cast(AppArgs, argparser.parse_args())
-    config_path = join(user_config_dir('grocy-importer', 'adaschma.name'),
-                       'config.ini')
-    config_parser = ConfigParser()
-    config_parser.read(config_path)
-    config = cast(AppConfig, config_parser)
+    config, config_path = load_config()
     try:
         grocy = GrocyApi(**config['grocy'], dry_run=args.dry_run,
                          timeout=args.timeout)
