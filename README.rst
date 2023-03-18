@@ -36,7 +36,7 @@ Clone this repository and create a link `$TODO_ACTIONS_DIR/chore` to
 `grocy_importer.py`. Besides `todo-txt` itself only `python3`_ and some python libraries are required.
 Those are listed in requirements.txt and can be installed via `pip`_:
 
-.. code:: sh
+.. code::
 
    $ pip install -r requirements.txt
 
@@ -89,7 +89,7 @@ match your setup. Especially grocy's base_url and api_key need to be set.
 Usage
 =====
 
-.. code:: sh
+.. code::
 
     $ todo-txt help chore
     usage: chore chore [-h] [--timeout N] [--dry-run] {ls,push,pull} ...
@@ -108,7 +108,7 @@ Usage
     
 Let's demonstrate how to use of `chore` on a short todo list:
 
-.. code:: sh
+.. code::
 
     $ todo-txt ls
     1 Call Mom @Phone +Family
@@ -123,7 +123,7 @@ Let's demonstrate how to use of `chore` on a short todo list:
 
 First let's see what chores grocy has for us:
 
-.. code:: sh
+.. code::
  
     $ todo-txt chore ls --all
     Change towels in the bathroom chore:1
@@ -137,7 +137,7 @@ The --all option gets all chore including the ones that are not overdue or manua
 
 Now if we want to have these in our todo.txt we use the pull command:
 
-.. code:: sh
+.. code::
 
     $ todo-txt chore pull --all
     $ todo-txt ls
@@ -161,7 +161,7 @@ We can now work with the todo list as we normally would and complete the tasks.
 However we need to keep the completed tasks in todo.txt and only archive them
 later.
 
-.. code:: sh
+.. code::
 
     $ todo-txt -a do 8    #=> --exit 0
     $ todo-txt -a do 10   #=> --exit 0
@@ -169,7 +169,7 @@ later.
     $ todo-txt -a do 12   #=> --exit 0
     $ todo-txt -a do 13   #=> --exit 0
 
-.. code:: sh
+.. code::
 
     $ todo-txt chore pull
     Warning: completed chore 1. Run "push" and "archive" first. Aborting.
