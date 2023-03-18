@@ -3,7 +3,7 @@ name: run-tests
 on: [push]
 jobs:
   check-bats-version:
-    runs-on: debian-bookworm
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v3
