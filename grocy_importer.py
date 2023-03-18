@@ -1029,10 +1029,11 @@ class IngredientNormalizer:
         ''' Normalize given ingredients with grocy '''
         product_known = []
         product_unknown: list[Union[Ingredient, UnparseableIngredient]] = []
+        grocy_products = {n.lower(): p for (n, p) in self.products.items()}
         for ingred in ingredients:
             if isinstance(ingred, UnparseableIngredient):
                 product_unknown.append(ingred)
-            elif ingred.name not in self.products and ingred.name != '':
+            elif ingred.name.lower() not in grocy_products and ingred.name != '':
                 try:
                     product_known.append(self.apply_alias(ingred))
                 except KeyError:
@@ -1048,17 +1049,19 @@ class IngredientNormalizer:
         convertion_unknown = [ingred
                               for ingred, units in matching_units
                               if any(units)
-                              and not any(self.products[ingred.name
-                                                        ]['qu_id_stock']
+                              and not any(grocy_products[ingred.name
+                                                         ]['qu_id_stock']
                                           == u['id']
                                           for u in units)
                               and not any(u['id'] == c['from_qu_id']
                                           and c['to_qu_id']
-                                          == self.products[ingred.name
-                                                           ]['qu_id_stock']
+                                          == grocy_products[ingred.name.lower()
+                                                            ]['qu_id_stock']
                                           and c['product_id'
-                                                ] in [self.products[ingred.name
-                                                                    ]['id'],
+                                                ] in [grocy_products[ingred
+                                                                     .name
+                                                                     .lower()
+                                                                     ]['id'],
                                                       None]
                                           for u in units
                                           for c in self.convertions)]
