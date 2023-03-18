@@ -1,0 +1,22 @@
+---
+name: run-tests
+on: [push]
+jobs:
+  check-bats-version:
+    runs-on: debian-bookworm
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v3
+        name: Setup Python
+        with:
+          python-version: 3.11
+      - name: Install deb-packages
+        run:
+          - sudo apt-get --quiet update --yes
+          - sudo apt-get --quiet install --yes git clitest todotxt-cli tox
+            python3-docutils flake8 python3-bs4 python3-requests
+            python3-marshmallow python3-appdirs python3-argcomplete
+            python3-pdfminer python3-html5lib python3-recipe-scrapers
+      - name: Run tox
+        run:
+          - tox run-parallel -e ALL
