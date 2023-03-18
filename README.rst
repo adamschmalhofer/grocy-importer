@@ -173,6 +173,10 @@ later.
     $ todo-txt -a do 13   #=> --exit 0
 
 
+When we want to inform grocy that we have completed the chores we run a
+`todo-txt chore push` and remove the completed tasks with a `todo-txt archive`.
+As long as completed chores are in our todo.txt a `todo-txt chore pull` will be
+prevented so no completed chore gets forgotten.
 
 .. code::
 
