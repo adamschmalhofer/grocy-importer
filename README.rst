@@ -53,6 +53,39 @@ Setup
 Copy config.ini to ~/.config/grocy-importer/config.ini and set the values to
 match your setup. Especially grocy's base_url and api_key need to be set.
 
+.. code:: ini
+
+    #$ cat config.ini
+    [grocy]
+    
+    base_url = http://localhost/grocy/public/api
+    api_key = PLEASESET
+    
+    [netto]
+    
+    # Uncomment the following line to manually set the grocy shopping location to use.
+    # This isn't needed if you only have one shopping location with a name starting with
+    # 'netto' (case insensitive).
+    
+    #shopping_location_id = 42
+    
+    [rewe]
+    
+    # Uncomment the following line to manually set the grocy shopping location to use.
+    # This isn't needed if you only have one shopping location with a name starting with
+    # 'rewe' (case insensitive).
+    
+    #shopping_location_id = 7
+    
+    [dm]
+    
+    # Uncomment the following line to manually set the grocy shopping location to use.
+    # This isn't needed if you only have one shopping location with a name starting with
+    # 'dm' (case insensitive).
+    
+    #shopping_location_id = 14
+
+
 Usage
 =====
 
