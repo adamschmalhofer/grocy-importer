@@ -170,6 +170,8 @@ def as_chore_full(orig: GrocyChore,
 class GrocyUserFields(TypedDict):
     ''' Grocy UserFields we use '''
     context: NotRequired[Optional[str]]
+    prio: NotRequired[Optional[str]]
+    project: NotRequired[Optional[str]]
 
 
 class GrocyApi:
@@ -1248,16 +1250,26 @@ def chore_show_cmd(args: AppArgs,
               file=outfile)
 
 
+def has_userfield(name: Literal['context', 'prio', 'project'],
+                  fields: GrocyUserFields
+                  ) -> bool:
+    try:
+        return fields[name] is not None
+    except (KeyError, TypeError):
+        return False
+
+
 def show_chore(chore_id: int, chore_name: str,
                fields: GrocyUserFields,
                chore_rescheduled_date: Optional[str] = None
                ) -> Iterable[str]:
+    if has_userfield('prio', fields):
+        yield f"({fields['prio']})"
     yield chore_name
-    try:
-        if fields['context'] is not None:
-            yield f"@{fields['context']}"
-    except (KeyError, TypeError):
-        pass
+    if has_userfield('project', fields):
+        yield f"+{fields['project']}"
+    if has_userfield('context', fields):
+        yield f"@{fields['context']}"
     if chore_rescheduled_date is not None:
         yield f'due:{chore_rescheduled_date}'
     yield f'chore:{chore_id}'
