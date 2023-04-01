@@ -174,6 +174,11 @@ class GrocyUserFields(TypedDict):
     project: NotRequired[Optional[str]]
 
 
+class GrocyErrorResponse(TypedDict):
+    ''' Grocy Error Reponse '''
+    error_message: str
+
+
 class GrocyApi:
     ''' Calls to the Grocy REST-API '''
 
@@ -188,7 +193,10 @@ class GrocyApi:
 
     def assert_valid_response(self, response: requests.Response) -> None:
         if response.status_code//100 != 2:
-            raise UserError(f'Connection to Grocy failed: {response.reason}')
+            error_message = cast(GrocyErrorResponse,
+                                 response.json())['error_message']
+            raise UserError('Connection to Grocy failed with'
+                            f' {response.reason}: {error_message}')
 
     def get_all_product_barcodes(self) -> dict[str, GrocyProductBarCode]:
         ''' all product barcodes known to grocy '''
