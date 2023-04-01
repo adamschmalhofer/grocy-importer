@@ -193,10 +193,14 @@ class GrocyApi:
 
     def assert_valid_response(self, response: requests.Response) -> None:
         if response.status_code//100 != 2:
-            error_message = cast(GrocyErrorResponse,
-                                 response.json())['error_message']
-            raise UserError('Connection to Grocy failed with'
-                            f' {response.reason}: {error_message}')
+            try:
+                error_message = cast(GrocyErrorResponse,
+                                     response.json())['error_message']
+                raise UserError('Connection to Grocy failed with'
+                                f' {response.reason}: {error_message}')
+            except requests.exceptions.JSONDecodeError:
+                raise UserError('Connection to Grocy failed:'
+                                f' {response.reason}')
 
     def get_all_product_barcodes(self) -> dict[str, GrocyProductBarCode]:
         ''' all product barcodes known to grocy '''
