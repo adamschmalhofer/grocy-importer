@@ -308,13 +308,13 @@ class GrocyApi:
     def get_scheduled_manual_chores(self, now: datetime, get_all: bool = False
                                     ) -> Iterable[GrocyChoreFull]:
         ''' all manual chores that are scheduled '''
-        params = ({'query[]': ['period_type=manually',
+        params = {'query[]': (['period_type=manually',
                                'active=1',
                                'rescheduled_date>'
                                + now.strftime('%F %T')
-                               ]}
-                  if not get_all
-                  else {})
+                               ]
+                              if not get_all
+                              else ['active=1'])}
         response = requests.get(f'{self.base_url}/objects/chores',
                                 headers=self.headers,
                                 params=params,
@@ -1312,8 +1312,8 @@ def add_chore_show_arguments(parser: ArgumentParser) -> None:
                         help="Show chores with given context or no context"
                         )
     parser.add_argument('--all', action='store_true',
-                        help='Show all chores. By default we only show'
-                             ' manually scheduled and overdue chores.')
+                        help='Show all (active) chores. By default we only'
+                             ' show manually scheduled and overdue chores.')
 
 
 @dataclass
