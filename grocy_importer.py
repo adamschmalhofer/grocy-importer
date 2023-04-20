@@ -1276,17 +1276,13 @@ def chore_show_cmd(args: AppArgs,
     now = datetime.now()
     if not args.all:
         for chore in in_context(grocy.get_overdue_chores(now), args.context):
-            fields = grocy.get_user_fields('chores', chore["id"])
             print(' '.join(show_chore(chore['id'],
                                       chore['chore_name'],
-                                      fields
                                       )),
                   file=outfile)
     for choreFull in grocy.get_scheduled_manual_chores(now, args.all):
-        fields = grocy.get_user_fields('chores', choreFull["id"])
         print(' '.join(show_chore(choreFull['id'],
                        choreFull['name'],
-                       fields,
                        choreFull['rescheduled_date'])),
               file=outfile)
 
@@ -1301,16 +1297,9 @@ def has_userfield(name: Literal['context', 'prio', 'project'],
 
 
 def show_chore(chore_id: int, chore_name: str,
-               fields: GrocyUserFields,
                chore_rescheduled_date: Optional[str] = None
                ) -> Iterable[str]:
-    if has_userfield('prio', fields):
-        yield f"({fields['prio']})"
     yield chore_name
-    if has_userfield('project', fields):
-        yield f"+{fields['project']}"
-    if has_userfield('context', fields):
-        yield f"@{fields['context']}"
     if chore_rescheduled_date is not None:
         yield f'due:{chore_rescheduled_date}'
     yield f'chore:{chore_id}'
