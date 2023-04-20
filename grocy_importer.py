@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 from os import environ
 import webbrowser
 from shutil import copyfile
+import yaml
 
 from bs4 import BeautifulSoup
 import requests
@@ -1267,10 +1268,14 @@ def chore_show_cmd(args: AppArgs,
             choreFull = grocy.get_chore(chore_id)
             print(choreFull["name"],
                   file=outfile)
+            fields = grocy.get_user_fields('chores', choreFull["id"])
             if (outfile is sys.stdout
                     and choreFull["description"] is not None):
                 print("---")
                 print(choreFull["description"])
+            if (outfile is sys.stdout and fields is not None):
+                print("---")
+                print(yaml.dump(fields))
                 print()
         return
     now = datetime.now()
