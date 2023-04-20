@@ -400,6 +400,7 @@ class AppArgs:
     chores: list[int]
     func: Callable[[AppArgs, AppConfig, GrocyApi], None]
     context: Optional[str]
+    due_deadline: datetime
     all: bool
 
 
@@ -1280,14 +1281,15 @@ def chore_show_cmd(args: AppArgs,
                 print(yaml.dump(fields))
                 print()
         return
-    now = datetime.now()
     if not args.all:
-        for chore in in_context(grocy.get_overdue_chores(now), args.context):
+        for chore in in_context(grocy.get_overdue_chores(args.due_deadline),
+                                args.context):
             print(' '.join(show_chore(chore['id'],
                                       chore['chore_name'],
                                       )),
                   file=outfile)
-    for choreFull in grocy.get_scheduled_manual_chores(now, args.all):
+    for choreFull in grocy.get_scheduled_manual_chores(args.due_deadline,
+                                                       args.all):
         print(' '.join(show_chore(choreFull['id'],
                        choreFull['name'],
                        choreFull['rescheduled_date'])),
@@ -1339,6 +1341,11 @@ def add_chore_show_arguments(parser: ArgumentParser) -> None:
     parser.add_argument('--all', action='store_true',
                         help='Show all (active) chores. By default we only'
                              ' show manually scheduled and overdue chores.')
+    parser.add_argument('--due-today', action='store_const',
+                        const=datetime.now().date() + timedelta(days=1),
+                        dest='due_deadline', default=datetime.now(),
+                        help='Show chores that are overdue today'
+                             ' (instead of now)')
 
 
 @dataclass
