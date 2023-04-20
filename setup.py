@@ -18,5 +18,5 @@ setup(name='grocy_importer',
             'argcomplete',
             'pdfminer.six',
             'html5lib',
-            'yaml',
+            'pyyaml',
           ])
