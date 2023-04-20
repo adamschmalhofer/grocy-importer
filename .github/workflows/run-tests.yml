@@ -19,5 +19,6 @@ jobs:
           python3-docutils flake8 python3-bs4 python3-requests
           python3-marshmallow python3-appdirs python3-argcomplete
           python3-pdfminer python3-html5lib python3-recipe-scrapers
+          python3-yaml
       - name: Run tox
         run: tox run-parallel -e ALL

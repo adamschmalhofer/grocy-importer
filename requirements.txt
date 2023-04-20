@@ -6,3 +6,4 @@ argcomplete
 pdfminer.six
 html5lib
 recipe_scrapers
+yaml
