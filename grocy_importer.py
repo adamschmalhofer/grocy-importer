@@ -1172,9 +1172,40 @@ def chore_schedule_cmd(args: CliArgs,
         grocy.schedule_chore(chore_id, at)
 
 
-def in_context(fields: GrocyUserFields, context: Optional[str]) -> bool:
-    return (context is None or fields['context'] is None
-            or fields['context'] == context)
+def in_context(chores: Iterable[GrocyChore], context: Optional[str]
+               ) -> Iterable[GrocyChore]:
+    if context is None:
+        return chores
+    regex = given_context_or_no_context_regex(context)
+    return (c
+            for c in chores
+            if regex.search(c['chore_name']) is not None)
+
+
+def given_context_or_no_context_regex(context: str) -> re.Pattern[str]:
+    '''
+        >>> regex = given_context_or_no_context_regex('home')
+        >>> regex.search('@chore starting with context')
+        >>> regex.search('chore ending with @context')
+        >>> regex.search('chore with @context in the middle')
+        >>> regex.search('chore without any context') is not None
+        True
+        >>> regex.search('@home chore starting with context') is not None
+        True
+        >>> regex.search('chore ending with context @home') is not None
+        True
+        >>> regex.search('chore with @home context in the middle') is not None
+        True
+        >>> regex.search('chore with email@example.com and no context'
+        ...              ) is not None
+        True
+        >>> regex.search('chore with multible non-@context at symbols'
+        ...              ' email@example.com'
+        ...              ) is not None
+        True
+    '''
+    literal_context = re.escape(context)
+    return re.compile(rf'{literal_context}|^[^@]*([^ ]@[^@]*)*$')
 
 
 def todotxt_chore_pull(args: TodotxtArgs,
@@ -1244,10 +1275,8 @@ def chore_show_cmd(args: AppArgs,
         return
     now = datetime.now()
     if not args.all:
-        for chore in grocy.get_overdue_chores(now):
+        for chore in in_context(grocy.get_overdue_chores(now), args.context):
             fields = grocy.get_user_fields('chores', chore["id"])
-            if not in_context(fields, args.context):
-                continue
             print(' '.join(show_chore(chore['id'],
                                       chore['chore_name'],
                                       fields
