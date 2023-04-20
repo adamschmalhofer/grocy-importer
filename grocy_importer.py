@@ -1197,6 +1197,8 @@ def given_context_or_no_context_regex(context: str) -> re.Pattern[str]:
         True
         >>> regex.search('chore with @home context in the middle') is not None
         True
+        >>> regex.search('chore with @home and other @context') is not None
+        True
         >>> regex.search('chore with email@example.com and no context'
         ...              ) is not None
         True
