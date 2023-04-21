@@ -28,7 +28,7 @@ from bs4 import BeautifulSoup
 import requests
 from marshmallow import Schema, fields, EXCLUDE, post_load
 from appdirs import user_config_dir
-import shtab
+import argcomplete
 from pdfminer.high_level import extract_text
 from recipe_scrapers import scrape_me
 
@@ -511,13 +511,11 @@ class Store(ABC):
                 subcommand.add_argument('file_path',
                                         type=str,
                                         metavar='file',
-                                        help=self.store_info.file_help_msg
-                                        ).complete = shtab.FILE
+                                        help=self.store_info.file_help_msg)
             else:
                 subcommand.add_argument('file',
                                         type=FileType('r', encoding='utf-8'),
-                                        help=self.store_info.file_help_msg
-                                        ).complete = shtab.FILE
+                                        help=self.store_info.file_help_msg)
 
     def get_subcommands(self, store: Any) -> Iterable[Any]:
         import_cmd = store.add_parser('import',
@@ -1586,7 +1584,7 @@ def load_config() -> Tuple[AppConfig, str]:
 def main() -> None:
     ''' Run the CLI program '''
     argparser = get_argparser([Netto(), Rewe(), DrogerieMarkt()])
-    shtab.add_argument_to(argparser, ["--print-completion"])
+    argcomplete.autocomplete(argparser)
     args = cast(AppArgs, argparser.parse_args())
     config, config_path = load_config()
     try:
