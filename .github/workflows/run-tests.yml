@@ -17,7 +17,7 @@ jobs:
       - name: Install deb-packages
         run: apt-get --quiet install --yes git clitest todotxt-cli tox
           python3-docutils flake8 python3-bs4 python3-requests
-          python3-marshmallow python3-appdirs python3-argcomplete
+          python3-marshmallow python3-appdirs python3-shtab
           python3-pdfminer python3-html5lib python3-recipe-scrapers
           python3-yaml
       - name: Run tox
