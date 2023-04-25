@@ -181,7 +181,7 @@ prevented so no completed chore gets forgotten.
 .. code::
 
     $ todo-txt chore pull
-    Error: chore 1 is marked as marked as done todo.txt.
+    Error: chore 1 is marked as done in todo.txt.
      Run "push" and "archive" first. Aborting.
     $ todo-txt chore push    #=> --lines 5
     $ todo-txt archive   #=> --exit 0
