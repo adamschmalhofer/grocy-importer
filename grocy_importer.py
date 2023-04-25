@@ -296,12 +296,13 @@ class GrocyApi:
 
     def get_overdue_chores(self, now: datetime) -> Iterable[GrocyChore]:
         ''' all chores that are overdue '''
+        params = {'query[]': ['next_estimated_execution_time<'
+                              + now.strftime('%F %T')],
+                  'order': 'next_estimated_execution_time'}
         response = requests.get(self.base_url
                                 + '/chores',
                                 headers=self.headers,
-                                params={'query[]':
-                                        ['next_estimated_execution_time<'
-                                         + now.strftime('%F %T')]},
+                                params=params,
                                 timeout=self.timeout)
         self.assert_valid_response(response)
         return cast(Iterable[GrocyChore], response.json())
@@ -315,7 +316,8 @@ class GrocyApi:
                                + now.strftime('%F %T')
                                ]
                               if not get_all
-                              else ['active=1'])}
+                              else ['active=1']),
+                  'order': 'rescheduled_date'}
         response = requests.get(f'{self.base_url}/objects/chores',
                                 headers=self.headers,
                                 params=params,
@@ -1225,8 +1227,8 @@ def todotxt_chore_pull(args: TodotxtArgs,
             if match_ is None:
                 new_content.append(line)
             elif line.startswith('x '):
-                raise UserError(f'chore {match_.group(1)} is marked as marked'
-                                ' as done todo.txt.\n'
+                raise UserError(f'chore {match_.group(1)} is marked'
+                                ' as done in todo.txt.\n'
                                 ' Run "push" and "archive" first. Aborting.')
     copyfile(todo_file, todo_file + ".bak")
     with open(todo_file, 'w') as f:
@@ -1310,7 +1312,7 @@ def show_chore(chore_id: int, chore_name: str,
                ) -> Iterable[str]:
     yield chore_name
     if chore_rescheduled_date is not None:
-        yield f'due:{chore_rescheduled_date}'
+        yield f'due:{chore_rescheduled_date.split(" ")[0]}'
     yield f'chore:{chore_id}'
 
 
