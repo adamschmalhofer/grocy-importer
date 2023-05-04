@@ -1243,7 +1243,8 @@ def todotxt_chore_push(args: TodotxtArgs,
     ''' Send completed and rescheduled_date chores in todo.txt to grocy '''
     time = datetime.now().strftime('%H:%M:%S')
     regex = re.compile(r'^x (\d{4}-\d{2}-\d{2}) (?:.* )?chore:(\d+)'
-                       r'|chore:(\d+) (?:.* )?t:(\d{4}-\d{2}-\d{2})')
+                       r'|chore:(\d+) (?:.* )?t:(\d{4}-\d{2}-\d{2})'
+                       r'|^\(S\) (?:.* )?chore:(\d+)')
     with open(args.environ.TODO_FILE, 'r') as f:
         for line in f:
             match_ = regex.search(line)
@@ -1255,11 +1256,17 @@ def todotxt_chore_push(args: TodotxtArgs,
                                            tracked_time=did_at)
                 print(f'Completed {response["chore_id"]}'
                       f' on {response["tracked_time"]}')
-            else:
+            elif match_.group(3) is not None:
                 grocy.schedule_chore(int(match_.group(3)),
                                      f'{match_.group(4)}')
                 print(f'Rescheduled {match_.group(3)}'
                       f' to {match_.group(4)}')
+            else:
+                did_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                response = grocy.did_chore(int(match_.group(5)),
+                                           tracked_time=did_at)
+                print(f'Skiped {response["chore_id"]}'
+                      f' on {response["tracked_time"]}')
 
 
 def chore_show_cmd(args: AppArgs,

@@ -170,7 +170,12 @@ later.
     $ todo-txt -a do 10   #=> --exit 0
     $ todo-txt -a do 11   #=> --exit 0
     $ todo-txt -a do 12   #=> --exit 0
-    $ todo-txt -a do 13   #=> --exit 0
+
+To instead skip a chore, just give it a prio of S instead:
+
+.. code::
+
+    $ todo-txt pri 13 s  #=> --exit 0
 
 
 When we want to inform grocy that we have completed the chores we run a
