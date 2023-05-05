@@ -1242,28 +1242,29 @@ def todotxt_chore_push(args: TodotxtArgs,
                        grocy: GrocyApi) -> None:
     ''' Send completed and rescheduled_date chores in todo.txt to grocy '''
     time = datetime.now().strftime('%H:%M:%S')
-    regex = re.compile(r'^x (\d{4}-\d{2}-\d{2}) (?:.* )?chore:(\d+)'
+    regex = re.compile(r'^x (\d{4}-\d{2}-\d{2}) (?:.* )?\+auto '
+                       r'|^x (\d{4}-\d{2}-\d{2}) (?:.* )?chore:(\d+)'
                        r'|chore:(\d+) (?:.* )?t:(\d{4}-\d{2}-\d{2})'
                        r'|^\(S\) (?:.* )?chore:(\d+)')
     with open(args.environ.TODO_FILE, 'r') as f:
         for line in f:
             match_ = regex.search(line)
-            if match_ is None:
+            if match_ is None or match_.group(1) is not None:
                 continue
-            if match_.group(1) is not None:
-                did_at: GrocyDateTime = f'{match_.group(1)} {time}'
-                response = grocy.did_chore(int(match_.group(2)),
+            if match_.group(2) is not None:
+                did_at: GrocyDateTime = f'{match_.group(2)} {time}'
+                response = grocy.did_chore(int(match_.group(3)),
                                            tracked_time=did_at)
                 print(f'Completed {response["chore_id"]}'
                       f' on {response["tracked_time"]}')
-            elif match_.group(3) is not None:
-                grocy.schedule_chore(int(match_.group(3)),
-                                     f'{match_.group(4)}')
-                print(f'Rescheduled {match_.group(3)}'
-                      f' to {match_.group(4)}')
+            elif match_.group(4) is not None:
+                grocy.schedule_chore(int(match_.group(4)),
+                                     f'{match_.group(5)}')
+                print(f'Rescheduled {match_.group(4)}'
+                      f' to {match_.group(5)}')
             else:
                 did_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                response = grocy.did_chore(int(match_.group(5)),
+                response = grocy.did_chore(int(match_.group(6)),
                                            tracked_time=did_at)
                 print(f'Skiped {response["chore_id"]}'
                       f' on {response["tracked_time"]}')

@@ -3,7 +3,7 @@ todo-txt chore
 ==============
 
 I use `todo-txt`_ for my personal todo's and really love using it to decide
-what to do next. There are some extensions that help with reaccuring tasks,
+what to do next. There are some extensions that help with reoccurring tasks,
 however Grocy_ has some unique advantages:
 
 - easily coordinate chores with family members
@@ -124,7 +124,7 @@ Let's demonstrate how to use of `chore` on a short todo list:
     --
     TODO: 7 of 7 tasks shown
 
-First let's see what chores grocy has for us:
+First let's see what chores Grocy has for us:
 
 .. code::
  
@@ -178,7 +178,7 @@ To instead skip a chore, just give it a prio of S instead:
     $ todo-txt pri 13 s  #=> --exit 0
 
 
-When we want to inform grocy that we have completed the chores we run a
+When we want to inform Grocy that we have completed the chores we run a
 `todo-txt chore push` and remove the completed tasks with a `todo-txt archive`.
 As long as completed chores are in our todo.txt a `todo-txt chore pull` will be
 prevented so no completed chore gets forgotten.
@@ -202,3 +202,21 @@ prevented so no completed chore gets forgotten.
     8 Mop the kitchen floor chore:2
     --
     TODO: 8 of 8 tasks shown
+
+For some chores, however we might record the completion automatically and want
+the reminder if to do it without manually checking it of. Chores like airing
+out the apartment can be tracked with a home automation system and window
+sensors. Or running a backup script can call Grocy herself after completion. We
+mark these by having the +auto pseudo project in the task.
+
+.. code::
+
+    $ todo-txt add air out appartment +auto chore:42
+    9 air out appartment +auto chore:42
+    TODO: 9 added.
+    $ todo-txt add Run backup script +auto chore:43
+    10 Run backup script +auto chore:43
+    TODO: 10 added.
+    $ todo-txt -a do 9    #=> --exit 0
+    $ todo-txt -a do 10    #=> --exit 0
+    $ todo-txt chore push    #=> --lines 0
