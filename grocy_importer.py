@@ -393,6 +393,16 @@ class GrocyApi:
         self.assert_valid_response(response)
         return cast(GrocyUserFields, response.json())
 
+    def set_userfields(self, entity: str, object_id: int,
+                       user_fields: dict[str, object]) -> None:
+        ''' Sets a Grocy user field '''
+        call = f'/userfields/{entity}/{object_id}'
+        response = requests.put(self.base_url + call,
+                                headers=self.headers,
+                                timeout=self.timeout,
+                                data=json.dumps(user_fields))
+        self.assert_valid_response(response)
+
 
 @dataclass
 class AppArgs:
@@ -420,6 +430,7 @@ class CliArgs(AppArgs):
     days: int
     at: Optional[GrocyDateTime]
     keep: Literal['later', 'earlier', 'old', 'new']
+    entity: str
 
 
 @dataclass
@@ -1270,6 +1281,26 @@ def todotxt_chore_push(args: TodotxtArgs,
                       f' on {response["tracked_time"]}')
 
 
+def userfield_cmd(args: CliArgs,
+                  _: AppConfig,
+                  grocy: GrocyApi) -> None:
+    ''' Quickly add userfields '''
+    try:
+        for item in yaml.safe_load(args.file):
+            try:
+                item_id = item['id']
+                del item['id']
+                grocy.set_userfields(args.entity, item_id, item)
+                print(f'{args.entity} {item_id}')
+            except KeyError:
+                print('Error: missing id-field for entity in yaml file.',
+                      file=sys.stderr)
+    except TypeError:
+        print('Error: list missing in yaml file.', file=sys.stderr)
+    except yaml.scanner.ScannerError:
+        print('Error: yaml invalid.', file=sys.stderr)
+
+
 def chore_show_cmd(args: AppArgs,
                    _: AppConfig,
                    grocy: GrocyApi,
@@ -1456,6 +1487,20 @@ def get_argparser_cli(stores: Iterable[Store]) -> ArgumentParser:
                                   help='Show given chore')
     chore_show.set_defaults(func=chore_show_cmd)
     add_chore_show_arguments(chore_show)
+    userfield = subparsers.add_parser('userfield',
+                                      description='Add userfield(s) to'
+                                                  ' (usally) many grocy'
+                                                  ' entities from a yaml'
+                                                  ' file.',
+                                      help='Quickly add userfields')
+    userfield.set_defaults(func=userfield_cmd)
+    userfield.add_argument('entity',
+                           help='the type of entity that the user fields'
+                                ' should be added to. E.g. batteries, chores,'
+                                ' chores_log, ...')
+    userfield.add_argument('file',
+                           type=FileType('r', encoding='utf-8'),
+                           help='a yaml file with the user fields to set')
     return parser
 
 

@@ -1,0 +1,6 @@
+---
+- id: 10001
+  customfield1: ignored as entity-id missing
+- id: 2
+  customfield1: Changed entity2, field 2
+  customfield2: Changed entity2, field 2

@@ -1,0 +1,6 @@
+---
+- id: 1
+  customfield1: Changed entity1, field 1
+- id: 2
+  customfield1: Changed entity2, field 2
+  customfield2: Changed entity2, field 2
