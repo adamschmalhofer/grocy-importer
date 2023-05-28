@@ -1,4 +1,4 @@
-Run all tests via `make test` in the top most project directory.
+Run all tests via `tox -e ALL` in the top most project directory.
 
 
 Integration tests

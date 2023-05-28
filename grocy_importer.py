@@ -601,7 +601,7 @@ class StoreSubcommandInfo:
 
 
 class Rewe(Store):
-    'German supermarket chain REWE'
+    'Liefer- and Abholservice of the German supermarket chain REWE'
 
     @property
     def store_info(self) -> StoreSubcommandInfo:
@@ -610,7 +610,9 @@ class Rewe(Store):
             'Import from DSGVO provided "Meine REWE-Shop-Daten.json"',
             '''
             Path to "Meine REWE-Shop-Daten.json" file. Downloadable from
-            https://shop.rewe.de/mydata/privacy under "Meine Daten anfordern"
+            https://shop.rewe.de/mydata/privacy under "Meine Daten anfordern".
+            This only includes purches that were made via the Liefer- or
+            Abholservice. For in store purchases see ebon.
             ''',
             includes_history=True)
 
@@ -651,16 +653,17 @@ class Rewe(Store):
                             f" {units[p['qu_id']]['name_plural']}")
 
 
-class DrogerieMarkt(Store):
-    'German retail store chain dm-drogerie markt'
+class Ebon(Store):
+    'The receipt as PDF from diffent German stores (dm, Netto, or Rewe)'
 
     @property
     def store_info(self) -> StoreSubcommandInfo:
         return StoreSubcommandInfo(
-                'dm',
+                'ebon',
                 '''
                 Import a "Kassenbon als PDF" downloadable from webpage under
-                "Meine Markt-Einkäufe".
+                "Meine Markt-Einkäufe" for dm. In the store you will have to
+                show the Kundenkarte via the dm-App.
                 ''',
                 'Path to pdf',
                 use_file_path=True
@@ -673,7 +676,7 @@ class DrogerieMarkt(Store):
     def _get_purchases(ebon: str) -> Iterable[Purchase]:
         r'''
 
-        >>> list(DrogerieMarkt._get_purchases(
+        >>> list(Ebon._get_purchases(
         ... """15.03.2023  15:40  3022/2  288904/2   5166
         ...
         ... dmBio Streichcr. Curry PM 180g     1,45  2
@@ -689,7 +692,7 @@ class DrogerieMarkt(Store):
         ... #doctest: +NORMALIZE_WHITESPACE
         [Purchase(amount=1, price=1.45, name='dmBio Streichcr. Curry PM 180g'),
          Purchase(amount=1, price=1.95, name='CD Deo Roll-on Bio Granatapfel')]
-        >>> list(DrogerieMarkt._get_purchases(
+        >>> list(Ebon._get_purchases(
         ... """09.02.2023  18:24  3022/1  328288/3   2656
         ...
         ... Kodak Artikel Sofort               0,10  1
@@ -1638,7 +1641,7 @@ def load_config() -> Tuple[AppConfig, str]:
 
 def main() -> None:
     ''' Run the CLI program '''
-    argparser = get_argparser([Netto(), Rewe(), DrogerieMarkt()])
+    argparser = get_argparser([Netto(), Rewe(), Ebon()])
     argcomplete.autocomplete(argparser)
     args = cast(AppArgs, argparser.parse_args())
     config, config_path = load_config()
