@@ -358,6 +358,22 @@ class GrocyApi:
         self.assert_valid_response(response)
         return cast(GrocyChoreCompleted, response.json())
 
+    def charge_battery(self, battery_id: int, tracked_time: Optional[str]
+                       ) -> None:
+        ''' Mark a chore as done '''
+        if self.dry_run:
+            return
+        data = ({}
+                if tracked_time is None
+                else {'tracked_time': tracked_time})
+        logger.debug(data)
+        response = requests.post(f'{self.base_url}/batteries'
+                                 f'/{battery_id}/charge',
+                                 headers=self.headers,
+                                 json=data,
+                                 timeout=self.timeout)
+        self.assert_valid_response(response)
+
     def get_chore(self, chore_id: int) -> GrocyChoreFull:
         ''' Get a chore from grocy '''
         url = f'{self.base_url}/chores/{chore_id}'
@@ -409,7 +425,7 @@ class AppArgs:
     ''' Common args '''
     dry_run: bool
     timeout: int
-    chores: list[int]
+    ids: list[int]
     func: Callable[[AppArgs, AppConfig, GrocyApi], None]
     context: Optional[str]
     due_deadline: datetime
@@ -1148,13 +1164,21 @@ def human_agrees(question: str) -> bool:
     return 'y' in answer
 
 
+def battery_charge_cmd(args: CliArgs,
+                       _: AppConfig,
+                       grocy: GrocyApi) -> None:
+    ''' Track battery charge cycle. '''
+    for battery_id in args.ids:
+        grocy.charge_battery(battery_id, args.at)
+
+
 def chore_did_cmd(args: CliArgs,
                   _: AppConfig,
                   grocy: GrocyApi) -> None:
     ''' Mark chore(s) as done.
     '''
-    if len(args.chores) > 0:
-        for chore_id in args.chores:
+    if len(args.ids) > 0:
+        for chore_id in args.ids:
             grocy.did_chore(chore_id, args.at, args.skip)
         return
     now = datetime.now()
@@ -1174,7 +1198,7 @@ def chore_schedule_cmd(args: CliArgs,
     '''
     at = args.at or (datetime.now() + timedelta(days=args.days)
                      ).strftime('%Y-%m-%d %H:%M:%S')
-    for chore_id in args.chores:
+    for chore_id in args.ids:
         try:
             prev_schedule = grocy.get_chore(chore_id)['rescheduled_date']
         except KeyError:
@@ -1310,8 +1334,8 @@ def chore_show_cmd(args: AppArgs,
                    outfile: TextIO = sys.stdout) -> None:
     ''' Show chore(s).
     '''
-    if len(args.chores) > 0:
-        for chore_id in args.chores:
+    if len(args.ids) > 0:
+        for chore_id in args.ids:
             choreFull = grocy.get_chore(chore_id)
             print(choreFull["name"],
                   file=outfile)
@@ -1378,7 +1402,7 @@ def add_common_arguments(parser: ArgumentParser) -> None:
 
 
 def add_chore_show_arguments(parser: ArgumentParser) -> None:
-    parser.add_argument('chores', type=int, nargs='*')
+    parser.add_argument('ids', type=int, nargs='*')
     parser.add_argument('--context', '-@', type=str, nargs='?',
                         help="Show chores with given context or no context"
                         )
@@ -1468,7 +1492,8 @@ def get_argparser_cli(stores: Iterable[Store]) -> ArgumentParser:
     chore_did = chore.add_parser('did',
                                  help='Mark chore as done')
     chore_did.set_defaults(func=chore_did_cmd)
-    chore_did.add_argument('chores', type=int, nargs='*')
+    chore_did.add_argument('ids', type=int, nargs='*',
+                           help='id of the chore in grocy')
     chore_did.add_argument('--skip', action='store_true')
     chore_did.add_argument('--at',
                            metavar='y-m-d h:m:s',
@@ -1477,7 +1502,8 @@ def get_argparser_cli(stores: Iterable[Store]) -> ArgumentParser:
     chore_schedule = chore.add_parser('schedule',
                                       help='Schedule a chore')
     chore_schedule.set_defaults(func=chore_schedule_cmd)
-    chore_schedule.add_argument('chores', type=int, nargs='+')
+    chore_schedule.add_argument('ids', type=int, nargs='+',
+                                help='id of the chore in grocy')
     chore_schedule.add_argument('--at',
                                 metavar='y-m-d h:m:s',
                                 help="The scheduled time in Grocy's time"
@@ -1504,6 +1530,19 @@ def get_argparser_cli(stores: Iterable[Store]) -> ArgumentParser:
     userfield.add_argument('file',
                            type=FileType('r', encoding='utf-8'),
                            help='a yaml file with the user fields to set')
+    battery = subparsers.add_parser('battery',
+                                    help='Track battery charge cycles'
+                                    ).add_subparsers()
+    battery_charge = battery.add_parser('charge',
+                                        help='Track battery charge cycle')
+    battery_charge.add_argument('ids', type=int, nargs='+',
+                                help='id of the battery in grocy')
+    battery_charge.add_argument('--at',
+                                metavar='y-m-d h:m:s',
+                                help="Time the battery was charged in Grocy's"
+                                     " time format. E.g."
+                                     " '2022-11-01 08:41:00',")
+    battery_charge.set_defaults(func=battery_charge_cmd)
     return parser
 
 

@@ -11,19 +11,20 @@ we only include cases that are not useful there.
 
     $ grocy_importer.py --help
     usage: grocy_importer.py [-h] [--timeout N] [--dry-run]
-                             {whereis,shopping-list,recipe,purchase,chore,userfield}
+                             {whereis,shopping-list,recipe,purchase,chore,userfield,battery}
                              ...
     
     Help importing into Grocy
     
     positional arguments:
-      {whereis,shopping-list,recipe,purchase,chore,userfield}
+      {whereis,shopping-list,recipe,purchase,chore,userfield,battery}
         whereis             show location of a product
         shopping-list       export shopping list in todo.txt format
         recipe              assist importing recipes from the web
         purchase            import purchases
         chore               Prompt to do each overdue chore
         userfield           Quickly add userfields
+        battery             Track battery charge cycles
     
     options:
       -h, --help            show this help message and exit
@@ -75,6 +76,40 @@ Recipe
     
     Unknown unit convertion:
     
+
+Battery
+-------
+
+.. code::
+
+    $ grocy_importer.py battery --help
+    usage: grocy_importer.py battery [-h] {charge} ...
+    
+    positional arguments:
+      {charge}
+        charge    Track battery charge cycle
+    
+    options:
+      -h, --help  show this help message and exit
+
+.. code::
+
+    $ grocy_importer.py battery charge --help
+    usage: grocy_importer.py battery charge [-h] [--at y-m-d h:m:s] ids [ids ...]
+    
+    positional arguments:
+      ids               id of the battery in grocy
+    
+    options:
+      -h, --help        show this help message and exit
+      --at y-m-d h:m:s  Time the battery was charged in Grocy's time format. E.g.
+                        '2022-11-01 08:41:00',
+
+Charge the given battery
+
+.. code::
+
+    $ grocy_importer.py battery charge 1
 
 Userfields
 ----------
