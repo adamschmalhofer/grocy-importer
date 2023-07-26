@@ -165,7 +165,8 @@ def as_chore_full(orig: GrocyChore,
                   ) -> GrocyChoreFull:
     return GrocyChoreFull({'id': orig['id'], 'name': orig['chore_name'],
                            'description': orig['description'],
-                           'rescheduled_date': rescheduled_date})
+                           'rescheduled_date': rescheduled_date
+                           })
 
 
 class GrocyUserFields(TypedDict):
@@ -383,6 +384,16 @@ class GrocyApi:
         self.assert_valid_response(response)
         return cast(GrocyChoreFull, response.json()["chore"])
 
+    def get_chore_due(self, chore_id: int) -> GrocyDateTime:
+        ''' Get a chore's due date from grocy '''
+        url = f'{self.base_url}/chores/{chore_id}'
+        response = requests.get(url,
+                                headers=self.headers,
+                                timeout=self.timeout)
+        self.assert_valid_response(response)
+        return cast(GrocyDateTime,
+                    response.json()["next_estimated_execution_time"])
+
     def purchase(self, product_id: int, amount: float, price: float,
                  shopping_location_id: int) -> None:
         ''' Add a purchase to grocy '''
@@ -453,6 +464,7 @@ class CliArgs(AppArgs):
 class TodotxtArgs(AppArgs):
     ''' Structure of our todo-txt CLI args '''
     environ: TodotxtEnvVariables
+    due_after: Optional[Literal['now', 'tomorrow']]
 
 
 def normanlize_white_space(orig: str) -> str:
@@ -1252,11 +1264,26 @@ def given_context_or_no_context_regex(context: str) -> re.Pattern[str]:
     return re.compile(rf'{literal_context}|^[^@]*([^ ]@[^@]*)*$')
 
 
+def chore_due_is_after(time: datetime, chore_id: int, grocy: GrocyApi) -> bool:
+    return grocy.get_chore_due(chore_id) < time.strftime('%Y-%m-%d %H:%M:%S')
+
+
+to_datetime = {'now': datetime.now(),
+               'tomorrow': datetime.now().date() + timedelta(days=1)
+               }
+
+
 def todotxt_chore_pull(args: TodotxtArgs,
                        config: AppConfig,
                        grocy: GrocyApi,
                        pull_from_grocy: bool = True) -> None:
     '''Replace chores in todo.txt with current ones from grocy'''
+    keep_chore_if = cast(Callable[[int, GrocyApi], bool],
+                         partial(chore_due_is_after,
+                                 to_datetime[args.due_after])
+                         if hasattr(args, 'due_after'
+                                    ) and args.due_after is not None
+                         else lambda _, __: False)
     todo_file = args.environ.TODO_FILE
     new_content = []
     regex = re.compile(r'chore:(\d+)')
@@ -1269,6 +1296,8 @@ def todotxt_chore_pull(args: TodotxtArgs,
                 raise UserError(f'chore {match_.group(1)} is marked'
                                 ' as done in todo.txt.\n'
                                 ' Run "push" and "archive" first. Aborting.')
+            elif keep_chore_if(int(match_.group(1)), grocy):
+                new_content.append(line)
     copyfile(todo_file, todo_file + ".bak")
     with open(todo_file, 'w') as f:
         for line in new_content:
@@ -1457,6 +1486,7 @@ def get_todotxt_parser(environ: TodotxtEnvVariables) -> ArgumentParser:
 
     chore_drop = subparsers.add_parser('drop',
                                        help='Remove chores from todo-list')
+    chore_drop.add_argument('--due-after', choices=['now', 'tomorrow'])
     chore_drop.set_defaults(func=partial(todotxt_chore_pull,
                                          pull_from_grocy=False))
 

@@ -228,6 +228,15 @@ subcommand is your friend.
 
 .. code::
 
+    $ todo-txt chore drop --help
+    usage: chore chore drop [-h] [--due-after {now,tomorrow}]
+    
+    options:
+      -h, --help            show this help message and exit
+      --due-after {now,tomorrow}
+
+.. code::
+
     $ todo-txt ls
     01 Call Mom @Phone +Family
     02 Schedule annual checkup +Health
@@ -256,3 +265,38 @@ subcommand is your friend.
     7 Plan backyard herb garden @Home
     --
     TODO: 7 of 7 tasks shown
+
+It is also possible to only drop chores that are not yet due:
+
+.. code::
+
+    $ todo-txt chore pull --all
+    $ todo-txt ls
+    01 Call Mom @Phone +Family
+    02 Schedule annual checkup +Health
+    03 Outilne chapter 5 +Novel @Computer
+    04 Add cover sheets @Office +TPSReports
+    05 Download Todo.txt mobile app @Phone
+    06 Pick up milk @GroceryStore
+    07 Plan backyard herb garden @Home
+    08 Change towels in the bathroom chore:1
+    09 Mop the kitchen floor chore:2
+    10 Take out the trash chore:3
+    11 Vacuum the living room floor chore:4
+    12 Clean the litter box chore:5
+    13 Change the bed sheets chore:6
+    --
+    TODO: 13 of 13 tasks shown
+    $ todo-txt chore drop --due-after tomorrow
+    $ todo-txt ls
+    1 Call Mom @Phone +Family
+    2 Schedule annual checkup +Health
+    3 Outilne chapter 5 +Novel @Computer
+    4 Add cover sheets @Office +TPSReports
+    5 Download Todo.txt mobile app @Phone
+    6 Pick up milk @GroceryStore
+    7 Plan backyard herb garden @Home
+    8 Mop the kitchen floor chore:2
+    --
+    TODO: 8 of 8 tasks shown
+
