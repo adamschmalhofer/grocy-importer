@@ -1254,7 +1254,8 @@ def given_context_or_no_context_regex(context: str) -> re.Pattern[str]:
 
 def todotxt_chore_pull(args: TodotxtArgs,
                        config: AppConfig,
-                       grocy: GrocyApi) -> None:
+                       grocy: GrocyApi,
+                       pull_from_grocy: bool = True) -> None:
     '''Replace chores in todo.txt with current ones from grocy'''
     todo_file = args.environ.TODO_FILE
     new_content = []
@@ -1272,7 +1273,8 @@ def todotxt_chore_pull(args: TodotxtArgs,
     with open(todo_file, 'w') as f:
         for line in new_content:
             f.write(line)
-        chore_show_cmd(args, config, grocy, f)
+        if pull_from_grocy:
+            chore_show_cmd(args, config, grocy, f)
 
 
 def todotxt_chore_push(args: TodotxtArgs,
@@ -1452,6 +1454,11 @@ def get_todotxt_parser(environ: TodotxtEnvVariables) -> ArgumentParser:
                                             ' current ones from grocy')
     chore_pull.set_defaults(func=todotxt_chore_pull)
     add_chore_show_arguments(chore_pull)
+
+    chore_drop = subparsers.add_parser('drop',
+                                       help='Remove chores from todo-list')
+    chore_drop.set_defaults(func=partial(todotxt_chore_pull,
+                                         pull_from_grocy=False))
 
     usage = toplevel.add_parser('usage')
     usage.set_defaults(func=lambda _, __, ___: chore.print_help())

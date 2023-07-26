@@ -95,18 +95,20 @@ Usage
 .. code::
 
     $ todo-txt help chore
-    usage: chore chore [-h] [--timeout N] [--dry-run] {ls,push,pull} ...
+    usage: chore chore [-h] [--timeout N] [--dry-run] {ls,push,pull,drop} ...
     
     positional arguments:
-      {ls,push,pull}
-        ls            List chores from grocy
-        push          Send completed and rescheduled chores in todo.txt to grocy
-        pull          Replace chores in todo.txt with current ones from grocy
+      {ls,push,pull,drop}
+        ls                 List chores from grocy
+        push               Send completed and rescheduled chores in todo.txt to
+                           grocy
+        pull               Replace chores in todo.txt with current ones from grocy
+        drop               Remove chores from todo-list
     
     options:
-      -h, --help      show this help message and exit
-      --timeout N     Override the default timeout for each REST call
-      --dry-run       perform a trial run with no changes made
+      -h, --help           show this help message and exit
+      --timeout N          Override the default timeout for each REST call
+      --dry-run            perform a trial run with no changes made
 
     
 Let's demonstrate how to use of `chore` on a short todo list:
@@ -220,3 +222,37 @@ mark these by having the +auto pseudo project in the task.
     $ todo-txt -a do 9    #=> --exit 0
     $ todo-txt -a do 10    #=> --exit 0
     $ todo-txt chore push    #=> --lines 0
+
+If at some point you want to remove all chores from your todo list, the `drop`
+subcommand is your friend.
+
+.. code::
+
+    $ todo-txt ls
+    01 Call Mom @Phone +Family
+    02 Schedule annual checkup +Health
+    03 Outilne chapter 5 +Novel @Computer
+    04 Add cover sheets @Office +TPSReports
+    05 Download Todo.txt mobile app @Phone
+    06 Pick up milk @GroceryStore
+    07 Plan backyard herb garden @Home
+    08 Mop the kitchen floor chore:2
+    09 x 2023-07-26 air out appartment +auto chore:42
+    10 x 2023-07-26 Run backup script +auto chore:43
+    --
+    TODO: 10 of 10 tasks shown
+    $ todo-txt chore drop
+    Error: chore 42 is marked as done in todo.txt.
+     Run "push" and "archive" first. Aborting.
+    $ todo-txt archive   #=> --exit 0
+    $ todo-txt chore drop
+    $ todo-txt ls
+    1 Call Mom @Phone +Family
+    2 Schedule annual checkup +Health
+    3 Outilne chapter 5 +Novel @Computer
+    4 Add cover sheets @Office +TPSReports
+    5 Download Todo.txt mobile app @Phone
+    6 Pick up milk @GroceryStore
+    7 Plan backyard herb garden @Home
+    --
+    TODO: 7 of 7 tasks shown
