@@ -1264,8 +1264,12 @@ def given_context_or_no_context_regex(context: str) -> re.Pattern[str]:
     return re.compile(rf'{literal_context}|^[^@]*([^ ]@[^@]*)*$')
 
 
-def chore_due_is_after(time: datetime, chore_id: int, grocy: GrocyApi) -> bool:
-    return grocy.get_chore_due(chore_id) < time.strftime('%Y-%m-%d %H:%M:%S')
+def chore_due_is_before(time: datetime, chore_id: int, grocy: GrocyApi) -> bool:
+    try:
+        return grocy.get_chore_due(chore_id) < time.strftime('%Y-%m-%d %H:%M:%S')
+    except TypeError:
+        print(f'Warning: chore {chore_id} has no due date. Skipping', file=sys.stderr)
+        return True
 
 
 to_datetime = {'now': datetime.now(),
@@ -1279,7 +1283,7 @@ def todotxt_chore_pull(args: TodotxtArgs,
                        pull_from_grocy: bool = True) -> None:
     '''Replace chores in todo.txt with current ones from grocy'''
     keep_chore_if = cast(Callable[[int, GrocyApi], bool],
-                         partial(chore_due_is_after,
+                         partial(chore_due_is_before,
                                  to_datetime[args.due_after])
                          if hasattr(args, 'due_after'
                                     ) and args.due_after is not None
