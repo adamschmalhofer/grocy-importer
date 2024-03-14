@@ -775,7 +775,7 @@ class Netto(Store):
                     for part in email.walk()
                     if part.get_content_type() == 'text/html'
                     )[0].get_payload(decode=True)
-        soup = BeautifulSoup(html, 'html5lib')
+        soup = BeautifulSoup(cast(bytes, html), 'html5lib')
         purchase = list(column.get_text()
                         for row
                         in soup.select(' '.join(7*["tbody"] + ["tr"]))
@@ -1264,11 +1264,14 @@ def given_context_or_no_context_regex(context: str) -> re.Pattern[str]:
     return re.compile(rf'{literal_context}|^[^@]*([^ ]@[^@]*)*$')
 
 
-def chore_due_is_before(time: datetime, chore_id: int, grocy: GrocyApi) -> bool:
+def chore_due_is_before(time: datetime, chore_id: int, grocy: GrocyApi
+                        ) -> bool:
     try:
-        return grocy.get_chore_due(chore_id) < time.strftime('%Y-%m-%d %H:%M:%S')
+        return (grocy.get_chore_due(chore_id)
+                < time.strftime('%Y-%m-%d %H:%M:%S'))
     except TypeError:
-        print(f'Warning: chore {chore_id} has no due date. Skipping', file=sys.stderr)
+        print(f'Warning: chore {chore_id} has no due date. Skipping',
+              file=sys.stderr)
         return True
 
 
