@@ -237,19 +237,22 @@ subcommand is your friend.
 
 .. code::
 
-    $ todo-txt ls
-    01 Call Mom @Phone +Family
-    02 Schedule annual checkup +Health
-    03 Outilne chapter 5 +Novel @Computer
-    04 Add cover sheets @Office +TPSReports
-    05 Download Todo.txt mobile app @Phone
-    06 Pick up milk @GroceryStore
-    07 Plan backyard herb garden @Home
-    08 Mop the kitchen floor chore:2
-    09 x 2023-07-26 air out appartment +auto chore:42
-    10 x 2023-07-26 Run backup script +auto chore:43
-    --
-    TODO: 10 of 10 tasks shown
+   $ todo-txt ls
+   01 Call Mom @Phone +Family
+   02 Schedule annual checkup +Health
+   03 Outilne chapter 5 +Novel @Computer
+   04 Add cover sheets @Office +TPSReports
+   05 Download Todo.txt mobile app @Phone
+   06 Pick up milk @GroceryStore
+   07 Plan backyard herb garden @Home
+   08 Mop the kitchen floor chore:2
+   09 x 2023-07-26 air out appartment +auto chore:42
+   10 x 2023-07-26 Run backup script +auto chore:43
+   --
+   TODO: 10 of 10 tasks shown
+
+.. code::
+
     $ todo-txt chore drop
     Error: chore 42 is marked as done in todo.txt.
      Run "push" and "archive" first. Aborting.
