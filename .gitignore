@@ -3,3 +3,4 @@
 /tests/setup/done.txt
 /.tox
 /grocy_importer.egg-info/
+__pycache__

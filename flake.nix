@@ -1,5 +1,5 @@
 {
-  description = "Example Python development environment for Zero to Nix";
+  description = "development environment for Grocy-Importer";
 
   # Flake inputs
   inputs = {
@@ -33,10 +33,25 @@
           pkgs.mkShell {
             # The Nix packages provided in the environment
             packages = [
+              (with pkgs; [
+                # clitest          # not in nix
+                docutils
+                todo-txt-cli
+              ])
               # Python plus helper tools
               (python.withPackages (ps: with ps; [
-                virtualenv # Virtualenv
-                pip # The pip installer
+                tox
+                mypy
+                flake8
+                beautifulsoup4
+                requests
+                # marshmallow      # not in nix
+                appdirs
+                argcomplete
+                pdfminer-six
+                html5lib
+                recipe-scrapers
+                pyyaml
               ]))
             ];
           };
